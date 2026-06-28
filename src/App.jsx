@@ -4,6 +4,8 @@ import Login             from './pages/Login'
 import Layout            from './components/shared/Layout'
 import POS               from './pages/pos/POS'
 import Requisition       from './pages/pos/Requisition'
+import Cuentas           from './pages/pos/Cuentas'
+import CuentaDetalle     from './pages/pos/CuentaDetalle'
 import Dashboard         from './pages/admin/Dashboard'
 import Products          from './pages/admin/Products'
 import Recipes           from './pages/admin/Recipes'
@@ -11,6 +13,8 @@ import Inventory         from './pages/admin/Inventory'
 import Statistics        from './pages/admin/Statistics'
 import SalesHistory      from './pages/admin/SalesHistory'
 import AdminRequisitions from './pages/admin/AdminRequisitions'
+import AdminCorteCaja    from './pages/admin/AdminCorteCaja'
+import AdminCuentas      from './pages/admin/AdminCuentas'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -50,17 +54,26 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/pos"             element={<W><POS /></W>} />
-      <Route path="/pos/requisicion" element={<W><Requisition /></W>} />
-      <Route path="/admin"                element={<A><Dashboard /></A>} />
-      <Route path="/admin/ventas"         element={<A><SalesHistory /></A>} />
-      <Route path="/admin/productos"      element={<A><Products /></A>} />
-      <Route path="/admin/recetas"        element={<A><Recipes /></A>} />
-      <Route path="/admin/inventario"     element={<A><Inventory /></A>} />
-      <Route path="/admin/estadisticas"   element={<A><Statistics /></A>} />
-      <Route path="/admin/requisiciones"  element={<A><AdminRequisitions /></A>} />
-      <Route path="/" element={<Navigate to="/pos" replace />} />
-      <Route path="*" element={<Navigate to="/pos" replace />} />
+
+      {/* Cajero + Admin */}
+      <Route path="/pos"              element={<W><POS /></W>} />
+      <Route path="/pos/cuentas"      element={<W><Cuentas /></W>} />
+      <Route path="/pos/cuenta/:id"   element={<W><CuentaDetalle /></W>} />
+      <Route path="/pos/requisicion"  element={<W><Requisition /></W>} />
+
+      {/* Solo Admin */}
+      <Route path="/admin"                   element={<A><Dashboard /></A>} />
+      <Route path="/admin/ventas"            element={<A><SalesHistory /></A>} />
+      <Route path="/admin/productos"         element={<A><Products /></A>} />
+      <Route path="/admin/recetas"           element={<A><Recipes /></A>} />
+      <Route path="/admin/inventario"        element={<A><Inventory /></A>} />
+      <Route path="/admin/estadisticas"      element={<A><Statistics /></A>} />
+      <Route path="/admin/requisiciones"     element={<A><AdminRequisitions /></A>} />
+      <Route path="/admin/cortes"            element={<A><AdminCorteCaja /></A>} />
+      <Route path="/admin/cuentas"           element={<A><AdminCuentas /></A>} />
+
+      <Route path="/"  element={<Navigate to="/pos" replace />} />
+      <Route path="*"  element={<Navigate to="/pos" replace />} />
     </Routes>
   )
 }
