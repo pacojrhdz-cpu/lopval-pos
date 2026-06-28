@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { mxn, fmtDateTime } from '../../utils/format'
+import { mxn } from '../../utils/format'
 import {
   ShoppingCart, Search, Plus, Minus, Trash2, Tag,
   CreditCard, Banknote, Smartphone, X, CheckCircle, Clock, Printer
@@ -117,32 +117,22 @@ export default function POS() {
 
   return (
     <div className="flex h-full">
-      {/* Panel izquierdo */}
       <div className="flex-1 flex flex-col overflow-hidden border-r border-gray-200 bg-white">
-
         <div className="p-4 bg-white border-b">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+            <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Buscar producto..."
-              className="w-full pl-9 pr-4 py-2.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-            />
+              className="w-full pl-9 pr-4 py-2.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-400" />
           </div>
         </div>
 
         <div className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide bg-white border-b">
           {['Todos', ...categories.map(c => c.name)].map(cat => (
-            <button
-              key={cat}
-              onClick={() => setSelCat(cat)}
+            <button key={cat} onClick={() => setSelCat(cat)}
               className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                selCat === cat
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
+                selCat === cat ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}>
               {cat}
             </button>
           ))}
@@ -154,15 +144,10 @@ export default function POS() {
               const inCart = cart.find(i => i.id === product.id)
               const colorCls = CAT_COLORS[product.categories?.name] ?? 'bg-gray-100 text-gray-700 ring-gray-200'
               return (
-                <button
-                  key={product.id}
-                  onClick={() => addToCart(product)}
-                  className={`
-                    relative bg-white rounded-2xl p-3 shadow-sm border text-left
-                    hover:shadow-md active:scale-95 transition-all
-                    ${inCart ? 'border-gray-800 ring-2 ring-gray-200' : 'border-gray-100 hover:border-gray-300'}
-                  `}
-                >
+                <button key={product.id} onClick={() => addToCart(product)}
+                  className={`relative bg-white rounded-2xl p-3 shadow-sm border text-left hover:shadow-md active:scale-95 transition-all ${
+                    inCart ? 'border-gray-800 ring-2 ring-gray-200' : 'border-gray-100 hover:border-gray-300'
+                  }`}>
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-2 ring-1 ${colorCls}`}>
                     {product.categories?.icon ?? '🍽️'}
                   </div>
@@ -200,7 +185,6 @@ export default function POS() {
         )}
       </div>
 
-      {/* Panel derecho: carrito */}
       <div className="w-80 flex flex-col bg-white">
         <div className="flex items-center gap-2 px-4 py-3 border-b">
           <ShoppingCart className="w-5 h-5 text-gray-700" />
@@ -227,254 +211,4 @@ export default function POS() {
                     <p className="text-xs text-gray-500">{mxn(item.price)} c/u</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => updateQty(item.id, -1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <span className="w-6 text-center text-sm font-bold">{item.qty}</span>
-                    <button onClick={() => updateQty(item.id, 1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
-                      <Plus className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => removeItem(item.id)} className="w-7 h-7 rounded-full hover:bg-red-100 flex items-center justify-center text-gray-400 hover:text-red-500 ml-1 transition-colors">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                  <p className="text-sm font-bold text-gray-800 w-14 text-right">{mxn(item.price * item.qty)}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {cart.length > 0 && (
-          <div className="px-3 pb-2 border-t pt-3">
-            <div className="flex gap-2 items-center">
-              <Tag className="w-4 h-4 text-gray-400 flex-shrink-0" />
-              <input
-                type="number" min="0" max={subtotal} value={discount}
-                onChange={e => setDiscount(e.target.value)}
-                placeholder="Descuento $"
-                className="flex-1 bg-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-              />
-              <input
-                value={discReason} onChange={e => setDiscReason(e.target.value)}
-                placeholder="Motivo"
-                className="flex-1 bg-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-              />
-            </div>
-          </div>
-        )}
-
-        {cart.length > 0 && (
-          <div className="p-4 border-t space-y-2">
-            <div className="flex justify-between text-sm text-gray-500">
-              <span>Subtotal</span><span>{mxn(subtotal)}</span>
-            </div>
-            {discountAmt > 0 && (
-              <div className="flex justify-between text-sm text-amber-600">
-                <span>Descuento</span><span>-{mxn(discountAmt)}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-bold text-lg text-gray-900 border-t pt-2">
-              <span>Total</span><span>{mxn(total)}</span>
-            </div>
-            <button
-              onClick={() => setShowPayment(true)}
-              className="w-full bg-gray-900 hover:bg-gray-800 active:bg-black text-white font-bold rounded-xl py-3.5 transition-colors text-base"
-            >
-              Cobrar {mxn(total)}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {showPayment && (
-        <PaymentModal total={total} onClose={() => setShowPayment(false)} onComplete={completeSale} />
-      )}
-
-      {lastSale && (
-        <SuccessModal sale={lastSale} onClose={() => setLastSale(null)} />
-      )}
-    </div>
-  )
-}
-
-// ─── Modal de Pago ────────────────────────────────────────────
-function PaymentModal({ total, onClose, onComplete }) {
-  const [method,   setMethod]   = useState('efectivo')
-  const [platform, setPlatform] = useState('')
-  const [cash,     setCash]     = useState('')
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
-
-  const cashNum    = parseFloat(cash) || 0
-  const change     = cashNum - total
-  const validCash  = method !== 'efectivo' || cashNum >= total
-
-  async function handleConfirm() {
-    if (!validCash) { setError('El efectivo recibido es menor al total'); return }
-    if (method === 'plataforma' && !platform) { setError('Selecciona la plataforma'); return }
-    setLoading(true)
-    setError('')
-    try {
-      await onComplete(method, platform, cashNum)
-    } catch {
-      setError('Error al guardar la venta. Intenta de nuevo.')
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b">
-          <h2 className="font-bold text-gray-800 text-lg">Método de pago</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
-        </div>
-
-        <div className="p-5 space-y-4">
-          <p className="text-center text-3xl font-black text-gray-900">{mxn(total)}</p>
-
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { id: 'efectivo',   icon: Banknote,   label: 'Efectivo'   },
-              { id: 'tarjeta',    icon: CreditCard, label: 'Tarjeta'    },
-              { id: 'plataforma', icon: Smartphone, label: 'Plataforma' },
-            ].map(({ id, icon: Icon, label }) => (
-              <button
-                key={id}
-                onClick={() => setMethod(id)}
-                className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
-                  method === id ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                <span className="text-xs font-medium">{label}</span>
-              </button>
-            ))}
-          </div>
-
-          {method === 'efectivo' && (
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Efectivo recibido</label>
-              <input
-                type="number" value={cash} onChange={e => setCash(e.target.value)}
-                placeholder="$0.00"
-                className="w-full border rounded-xl px-4 py-2.5 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-gray-400"
-                autoFocus
-              />
-              <div className="flex gap-2 mt-2">
-                {[50,100,200,500].map(v => (
-                  <button key={v} onClick={() => setCash(String(v))}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-1.5 text-sm font-medium transition-colors">
-                    ${v}
-                  </button>
-                ))}
-              </div>
-              {cashNum >= total && (
-                <div className="mt-2 bg-green-50 border border-green-200 rounded-xl px-4 py-2 text-center">
-                  <p className="text-sm text-green-700">Cambio: <span className="font-bold text-lg">{mxn(change)}</span></p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {method === 'plataforma' && (
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Plataforma</label>
-              <select value={platform} onChange={e => setPlatform(e.target.value)}
-                className="w-full border rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-gray-400">
-                <option value="">Seleccionar...</option>
-                <option>Rappi</option>
-                <option>Uber Eats</option>
-                <option>Mercado Pago</option>
-                <option>DiDi Food</option>
-                <option>WhatsApp / Teléfono</option>
-                <option>Otra</option>
-              </select>
-            </div>
-          )}
-
-          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-
-          <button onClick={handleConfirm} disabled={loading}
-            className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-bold rounded-xl py-3.5 transition-colors">
-            {loading ? 'Procesando...' : 'Confirmar venta'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Modal de Éxito + Ticket ──────────────────────────────────
-function SuccessModal({ sale, onClose }) {
-  const methodLabel = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', plataforma: sale.platform_name }
-  const now = new Date()
-
-  // Auto-imprimir después de renderizar
-  useEffect(() => {
-    const timer = setTimeout(() => window.print(), 600)
-    return () => clearTimeout(timer)
-  }, [])
-
-  return (
-    <>
-      {/* ── Vista en pantalla ── */}
-      <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 no-print">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm text-center p-8">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="w-9 h-9 text-green-600" />
-          </div>
-          <h2 className="text-xl font-bold text-gray-800 mb-1">¡Venta registrada!</h2>
-          <p className="text-3xl font-black text-gray-900 mb-3">{mxn(sale.total)}</p>
-          <p className="text-sm text-gray-500 mb-1">Pago: {methodLabel[sale.payment_method]}</p>
-          {sale.change > 0 && (
-            <p className="text-sm font-semibold text-green-700 mb-4">Cambio: {mxn(sale.change)}</p>
-          )}
-          <div className="text-left bg-gray-50 rounded-xl p-3 mb-4 text-xs space-y-1">
-            {sale.items?.map(i => (
-              <div key={i.id} className="flex justify-between text-gray-600">
-                <span>{i.name} x{i.qty}</span>
-                <span>{mxn(i.price * i.qty)}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => window.print()}
-              className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-3 text-sm font-medium transition-colors">
-              <Printer className="w-4 h-4" /> Reimprimir
-            </button>
-            <button onClick={onClose}
-              className="flex-1 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl py-3 transition-colors">
-              Nueva venta
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Ticket de impresión (solo visible al imprimir) ── */}
-      <div className="print-only ticket">
-        <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-          <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '0' }}>Pizza &amp; Totó</p>
-          <p style={{ fontSize: '10px', margin: '2px 0' }}>Grupo Lopval</p>
-          <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>
-            {now.toLocaleDateString('es-MX')} {now.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})}
-          </p>
-          {sale.cashier && <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>Cajero: {sale.cashier}</p>}
-        </div>
-
-        <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '6px 0', margin: '6px 0' }}>
-          {sale.items?.map((i, idx) => (
-            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px' }}>
-              <span>{i.name} x{i.qty}</span>
-              <span>{mxn(i.price * i.qty)}</span>
-            </div>
-          ))}
-        </div>
-
-        {sale.discount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px' }}>
-            <span>Descuento</span><span>-{mxn(sale.discount)}</span>
-          </div>
-        )}
-        <div style={{ display: 'flex', justifyConte
+                    <button onClick={() => updateQty(item.id, -1)} className="w-7
