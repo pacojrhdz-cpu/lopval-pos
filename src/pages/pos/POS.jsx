@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { mxn, fmtDateTime } from '../../utils/format'
+import { useNavigate } from 'react-router-dom'
+import { mxn } from '../../utils/format'
 import {
   ShoppingCart, Search, Plus, Minus, Trash2, Tag,
-  CreditCard, Banknote, Smartphone, X, CheckCircle, Clock, Printer
+  CreditCard, Banknote, Smartphone, X, CheckCircle, Clock,
+  Printer, BookOpen, Scissors
 } from 'lucide-react'
 
 const CAT_COLORS = {
@@ -18,22 +20,40 @@ const CAT_COLORS = {
 
 export default function POS() {
   const { user, profile } = useAuth()
-  const [categories, setCategories] = useState([])
-  const [products,   setProducts]   = useState([])
-  const [selCat,     setSelCat]     = useState('Todos')
-  const [search,     setSearch]     = useState('')
-  const [cart,       setCart]       = useState([])
-  const [discount,   setDiscount]   = useState('')
-  const [discReason, setDiscReason] = useState('')
-  const [showPayment,setShowPayment]= useState(false)
-  const [lastSale,   setLastSale]   = useState(null)
-  const [recentSales,setRecentSales]= useState([])
+  const navigate = useNavigate()
+  const [categories,       setCategories]       = useState([])
+  const [products,         setProducts]         = useState([])
+  const [selCat,           setSelCat]           = useState('Todos')
+  const [search,           setSearch]           = useState('')
+  const [cart,             setCart]             = useState([])
+  const [discount,         setDiscount]         = useState('')
+  const [discReason,       setDiscReason]       = useState('')
+  const [showPayment,      setShowPayment]      = useState(false)
+  const [lastSale,         setLastSale]         = useState(null)
+  const [recentSales,      setRecentSales]      = useState([])
+  const [cashRegister,     setCashRegister]     = useState(null)
+  const [checkingRegister, setCheckingRegister] = useState(true)
+  const [showCorte,        setShowCorte]        = useState(false)
 
   useEffect(() => {
     fetchCategories()
     fetchProducts()
     fetchRecentSales()
-  }, [])
+    if (user) fetchCashRegister()
+  }, [user])
+
+  async function fetchCashRegister() {
+    const { data } = await supabase
+      .from('cash_registers')
+      .select('*')
+      .eq('cashier_id', user.id)
+      .eq('status', 'open')
+      .order('opening_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    setCashRegister(data ?? null)
+    setCheckingRegister(false)
+  }
 
   async function fetchCategories() {
     const { data } = await supabase.from('categories').select('*').eq('active', true).order('sort_order')
@@ -49,7 +69,7 @@ export default function POS() {
   }
 
   const filtered = products.filter(p => {
-    const matchCat = selCat === 'Todos' || p.categories?.name === selCat
+    const matchCat    = selCat === 'Todos' || p.categories?.name === selCat
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
     return matchCat && matchSearch
   })
@@ -66,15 +86,9 @@ export default function POS() {
     })
   }, [])
 
-  const updateQty = (id, delta) => {
-    setCart(prev => prev
-      .map(i => i.id === id ? { ...i, qty: i.qty + delta } : i)
-      .filter(i => i.qty > 0)
-    )
-  }
-
-  const removeItem = (id) => setCart(prev => prev.filter(i => i.id !== id))
-  const clearCart  = () => { setCart([]); setDiscount(''); setDiscReason('') }
+  const updateQty  = (id, delta) => setCart(prev => prev.map(i => i.id === id ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0))
+  const removeItem = (id)        => setCart(prev => prev.filter(i => i.id !== id))
+  const clearCart  = ()          => { setCart([]); setDiscount(''); setDiscReason('') }
 
   const subtotal    = cart.reduce((s, i) => s + i.price * i.qty, 0)
   const discountAmt = Math.min(parseFloat(discount) || 0, subtotal)
@@ -83,17 +97,18 @@ export default function POS() {
   async function completeSale(paymentMethod, platformName, cashReceived) {
     const changeGiven = paymentMethod === 'efectivo' ? (cashReceived - total) : 0
     const { data: sale, error } = await supabase.from('sales').insert({
-      cashier_id:      user?.id,
-      cashier_name:    profile?.name ?? 'Cajero',
+      cashier_id:       user?.id,
+      cashier_name:     profile?.name ?? 'Cajero',
+      cash_register_id: cashRegister?.id ?? null,
       subtotal,
-      discount:        discountAmt,
-      discount_reason: discReason || null,
+      discount:         discountAmt,
+      discount_reason:  discReason || null,
       total,
-      payment_method:  paymentMethod,
-      platform_name:   platformName || null,
-      cash_received:   paymentMethod === 'efectivo' ? cashReceived : null,
-      change_given:    paymentMethod === 'efectivo' ? changeGiven : null,
-      status: 'completed'
+      payment_method:   paymentMethod,
+      platform_name:    platformName || null,
+      cash_received:    paymentMethod === 'efectivo' ? cashReceived : null,
+      change_given:     paymentMethod === 'efectivo' ? changeGiven  : null,
+      status:           'completed',
     }).select().single()
 
     if (error) throw error
@@ -105,7 +120,7 @@ export default function POS() {
         product_name: i.name,
         quantity:     i.qty,
         unit_price:   i.price,
-        subtotal:     i.price * i.qty
+        subtotal:     i.price * i.qty,
       }))
     )
 
@@ -115,13 +130,33 @@ export default function POS() {
     fetchRecentSales()
   }
 
+  // ── Loading ──
+  if (checkingRegister) {
+    return (
+      <div className="min-h-full flex items-center justify-center" style={{ background: '#faf8f4' }}>
+        <p className="text-gray-400 animate-pulse">Verificando turno...</p>
+      </div>
+    )
+  }
+
+  // ── Apertura de caja obligatoria ──
+  if (!cashRegister) {
+    return (
+      <AperturaOverlay
+        userId={user?.id}
+        cashierName={profile?.name ?? 'Cajero'}
+        onOpen={reg => setCashRegister(reg)}
+      />
+    )
+  }
+
   return (
     <div className="flex h-full">
-      {/* Panel izquierdo */}
+      {/* ── Panel izquierdo ── */}
       <div className="flex-1 flex flex-col overflow-hidden border-r border-gray-200 bg-white">
 
-        <div className="p-4 bg-white border-b">
-          <div className="relative">
+        <div className="p-4 bg-white border-b flex gap-2 items-center">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               value={search}
@@ -130,6 +165,18 @@ export default function POS() {
               className="w-full pl-9 pr-4 py-2.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
             />
           </div>
+          <button
+            onClick={() => navigate('/pos/cuentas')}
+            className="flex items-center gap-2 px-3 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-medium transition-colors"
+          >
+            <BookOpen className="w-4 h-4" /> Cuentas
+          </button>
+          <button
+            onClick={() => setShowCorte(true)}
+            className="flex items-center gap-2 px-3 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl text-sm font-medium transition-colors"
+          >
+            <Scissors className="w-4 h-4" /> Corte
+          </button>
         </div>
 
         <div className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide bg-white border-b">
@@ -138,9 +185,7 @@ export default function POS() {
               key={cat}
               onClick={() => setSelCat(cat)}
               className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                selCat === cat
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                selCat === cat ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
               {cat}
@@ -151,7 +196,7 @@ export default function POS() {
         <div className="flex-1 overflow-y-auto p-4" style={{ background: '#faf8f4' }}>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {filtered.map(product => {
-              const inCart = cart.find(i => i.id === product.id)
+              const inCart   = cart.find(i => i.id === product.id)
               const colorCls = CAT_COLORS[product.categories?.name] ?? 'bg-gray-100 text-gray-700 ring-gray-200'
               return (
                 <button
@@ -200,7 +245,7 @@ export default function POS() {
         )}
       </div>
 
-      {/* Panel derecho: carrito */}
+      {/* ── Panel derecho: carrito ── */}
       <div className="w-80 flex flex-col bg-white">
         <div className="flex items-center gap-2 px-4 py-3 border-b">
           <ShoppingCart className="w-5 h-5 text-gray-700" />
@@ -287,13 +332,224 @@ export default function POS() {
         )}
       </div>
 
-      {showPayment && (
-        <PaymentModal total={total} onClose={() => setShowPayment(false)} onComplete={completeSale} />
+      {showPayment && <PaymentModal total={total} onClose={() => setShowPayment(false)} onComplete={completeSale} />}
+      {lastSale    && <SuccessModal sale={lastSale} onClose={() => setLastSale(null)} />}
+      {showCorte   && (
+        <CorteModal
+          cashRegister={cashRegister}
+          onClose={() => setShowCorte(false)}
+          onClosed={() => { setCashRegister(null); setCheckingRegister(false); setShowCorte(false) }}
+        />
       )}
+    </div>
+  )
+}
 
-      {lastSale && (
-        <SuccessModal sale={lastSale} onClose={() => setLastSale(null)} />
-      )}
+// ─── Apertura de Caja ─────────────────────────────────────────
+function AperturaOverlay({ userId, cashierName, onOpen }) {
+  const [amount, setAmount] = useState('')
+  const [notes,  setNotes]  = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error,  setError]  = useState('')
+
+  async function handleOpen(e) {
+    e.preventDefault()
+    const amt = parseFloat(amount)
+    if (isNaN(amt) || amt < 0) { setError('Ingresa un monto válido'); return }
+    setSaving(true)
+    setError('')
+    const { data, error: err } = await supabase.from('cash_registers').insert({
+      cashier_id:     userId,
+      cashier_name:   cashierName,
+      opening_amount: amt,
+      notes:          notes || null,
+      status:         'open',
+    }).select().single()
+    if (err) { setError('Error al abrir caja. Intenta de nuevo.'); setSaving(false); return }
+    onOpen(data)
+  }
+
+  return (
+    <div className="min-h-full flex items-center justify-center p-4" style={{ background: '#faf8f4' }}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8 space-y-5">
+        <div className="text-center">
+          <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+            <span className="text-2xl">💵</span>
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">Apertura de caja</h1>
+          <p className="text-sm text-gray-500 mt-1">Ingresa el efectivo en caja al iniciar tu turno</p>
+        </div>
+
+        <form onSubmit={handleOpen} className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1.5">Efectivo en caja</label>
+            <input
+              type="number" min="0" step="0.01" value={amount}
+              onChange={e => setAmount(e.target.value)}
+              placeholder="$0.00"
+              autoFocus
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-2xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-gray-400"
+            />
+            <div className="grid grid-cols-4 gap-2 mt-2">
+              {[0, 200, 500, 1000].map(v => (
+                <button key={v} type="button" onClick={() => setAmount(String(v))}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-1.5 text-sm font-medium transition-colors">
+                  ${v}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1.5">Notas (opcional)</label>
+            <input
+              value={notes} onChange={e => setNotes(e.target.value)}
+              placeholder="Observaciones del turno"
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+            />
+          </div>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <button type="submit" disabled={saving}
+            className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-bold rounded-xl py-3.5 transition-colors">
+            {saving ? 'Abriendo...' : 'Abrir caja e iniciar turno'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Corte de Caja ────────────────────────────────────────────
+function CorteModal({ cashRegister, onClose, onClosed }) {
+  const [summary,    setSummary]    = useState(null)
+  const [closingAmt, setClosingAmt] = useState('')
+  const [notes,      setNotes]      = useState('')
+  const [loading,    setLoading]    = useState(true)
+  const [saving,     setSaving]     = useState(false)
+  const [error,      setError]      = useState('')
+
+  useEffect(() => { fetchSummary() }, [])
+
+  async function fetchSummary() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('sales')
+      .select('total,payment_method')
+      .eq('cash_register_id', cashRegister.id)
+      .eq('status', 'completed')
+
+    const s = (data ?? []).reduce((acc, sale) => {
+      acc.total      += Number(sale.total)
+      acc.count      += 1
+      if (sale.payment_method === 'efectivo')   acc.efectivo   += Number(sale.total)
+      if (sale.payment_method === 'tarjeta')    acc.tarjeta    += Number(sale.total)
+      if (sale.payment_method === 'plataforma') acc.plataforma += Number(sale.total)
+      return acc
+    }, { total: 0, count: 0, efectivo: 0, tarjeta: 0, plataforma: 0 })
+
+    setSummary(s)
+    setLoading(false)
+  }
+
+  async function handleClose() {
+    const amt = parseFloat(closingAmt)
+    if (isNaN(amt) || amt < 0) { setError('Ingresa el efectivo contado'); return }
+    setSaving(true)
+    const expectedCash = Number(cashRegister.opening_amount) + (summary?.efectivo ?? 0)
+    const difference   = amt - expectedCash
+    await supabase.from('cash_registers').update({
+      status:         'closed',
+      closing_amount: amt,
+      closing_at:     new Date().toISOString(),
+      total_sales:    summary?.total     ?? 0,
+      total_cash:     summary?.efectivo  ?? 0,
+      total_card:     summary?.tarjeta   ?? 0,
+      total_platform: summary?.plataforma ?? 0,
+      difference,
+      notes: notes || null,
+    }).eq('id', cashRegister.id)
+    onClosed()
+  }
+
+  const expectedCash = Number(cashRegister.opening_amount) + (summary?.efectivo ?? 0)
+  const closingNum   = parseFloat(closingAmt) || 0
+  const difference   = closingNum - expectedCash
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b">
+          <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+            <Scissors className="w-5 h-5" /> Corte de caja
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
+        </div>
+
+        {loading ? (
+          <div className="p-8 text-center text-gray-400 animate-pulse">Calculando resumen...</div>
+        ) : (
+          <div className="p-5 space-y-4">
+            <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-2">Resumen del turno</p>
+              <Row label="Apertura de caja"    value={mxn(cashRegister.opening_amount)} />
+              <Row label="Ventas en efectivo"  value={mxn(summary.efectivo)}  cls="text-green-700" />
+              <Row label="Ventas con tarjeta"  value={mxn(summary.tarjeta)}   cls="text-blue-700" />
+              <Row label="Plataformas"         value={mxn(summary.plataforma)} cls="text-purple-700" />
+              <div className="border-t pt-2">
+                <Row label={`Total ventas (${summary.count} órdenes)`} value={mxn(summary.total)} bold />
+              </div>
+              <div className="border-t pt-2">
+                <Row label="Efectivo esperado en caja" value={mxn(expectedCash)} bold />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-600 mb-1.5">Efectivo contado en caja</label>
+              <input
+                type="number" min="0" step="0.01" value={closingAmt}
+                onChange={e => setClosingAmt(e.target.value)}
+                placeholder="$0.00" autoFocus
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-gray-400"
+              />
+            </div>
+
+            {closingAmt !== '' && (
+              <div className={`rounded-xl px-4 py-3 flex justify-between items-center ${
+                Math.abs(difference) < 1 ? 'bg-green-50 border border-green-200' :
+                difference < 0 ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'
+              }`}>
+                <span className="text-sm font-medium text-gray-700">Diferencia</span>
+                <span className={`font-bold text-lg ${
+                  Math.abs(difference) < 1 ? 'text-green-700' :
+                  difference < 0 ? 'text-red-700' : 'text-amber-700'
+                }`}>
+                  {difference >= 0 ? '+' : ''}{mxn(difference)}
+                </span>
+              </div>
+            )}
+
+            <input
+              value={notes} onChange={e => setNotes(e.target.value)}
+              placeholder="Notas del turno (opcional)"
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+            />
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+
+            <button onClick={handleClose} disabled={saving}
+              className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-bold rounded-xl py-3.5 transition-colors">
+              {saving ? 'Cerrando turno...' : 'Cerrar turno'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Row({ label, value, cls = 'text-gray-800', bold = false }) {
+  return (
+    <div className={`flex justify-between text-sm ${bold ? 'font-bold' : ''}`}>
+      <span className="text-gray-600">{label}</span>
+      <span className={cls}>{value}</span>
     </div>
   )
 }
@@ -306,21 +562,16 @@ function PaymentModal({ total, onClose, onComplete }) {
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
 
-  const cashNum    = parseFloat(cash) || 0
-  const change     = cashNum - total
-  const validCash  = method !== 'efectivo' || cashNum >= total
+  const cashNum   = parseFloat(cash) || 0
+  const change    = cashNum - total
+  const validCash = method !== 'efectivo' || cashNum >= total
 
   async function handleConfirm() {
     if (!validCash) { setError('El efectivo recibido es menor al total'); return }
     if (method === 'plataforma' && !platform) { setError('Selecciona la plataforma'); return }
-    setLoading(true)
-    setError('')
-    try {
-      await onComplete(method, platform, cashNum)
-    } catch {
-      setError('Error al guardar la venta. Intenta de nuevo.')
-      setLoading(false)
-    }
+    setLoading(true); setError('')
+    try { await onComplete(method, platform, cashNum) }
+    catch { setError('Error al guardar la venta. Intenta de nuevo.'); setLoading(false) }
   }
 
   return (
@@ -330,38 +581,29 @@ function PaymentModal({ total, onClose, onComplete }) {
           <h2 className="font-bold text-gray-800 text-lg">Método de pago</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
         </div>
-
         <div className="p-5 space-y-4">
           <p className="text-center text-3xl font-black text-gray-900">{mxn(total)}</p>
-
           <div className="grid grid-cols-3 gap-2">
             {[
               { id: 'efectivo',   icon: Banknote,   label: 'Efectivo'   },
               { id: 'tarjeta',    icon: CreditCard, label: 'Tarjeta'    },
               { id: 'plataforma', icon: Smartphone, label: 'Plataforma' },
             ].map(({ id, icon: Icon, label }) => (
-              <button
-                key={id}
-                onClick={() => setMethod(id)}
+              <button key={id} onClick={() => setMethod(id)}
                 className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
                   method === id ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }`}
-              >
+                }`}>
                 <Icon className="w-5 h-5" />
                 <span className="text-xs font-medium">{label}</span>
               </button>
             ))}
           </div>
-
           {method === 'efectivo' && (
             <div>
               <label className="block text-sm text-gray-600 mb-1">Efectivo recibido</label>
-              <input
-                type="number" value={cash} onChange={e => setCash(e.target.value)}
-                placeholder="$0.00"
-                className="w-full border rounded-xl px-4 py-2.5 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-gray-400"
-                autoFocus
-              />
+              <input type="number" value={cash} onChange={e => setCash(e.target.value)}
+                placeholder="$0.00" autoFocus
+                className="w-full border rounded-xl px-4 py-2.5 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-gray-400" />
               <div className="flex gap-2 mt-2">
                 {[50,100,200,500].map(v => (
                   <button key={v} onClick={() => setCash(String(v))}
@@ -377,25 +619,18 @@ function PaymentModal({ total, onClose, onComplete }) {
               )}
             </div>
           )}
-
           {method === 'plataforma' && (
             <div>
               <label className="block text-sm text-gray-600 mb-1">Plataforma</label>
               <select value={platform} onChange={e => setPlatform(e.target.value)}
                 className="w-full border rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-gray-400">
                 <option value="">Seleccionar...</option>
-                <option>Rappi</option>
-                <option>Uber Eats</option>
-                <option>Mercado Pago</option>
-                <option>DiDi Food</option>
-                <option>WhatsApp / Teléfono</option>
-                <option>Otra</option>
+                <option>Rappi</option><option>Uber Eats</option><option>Mercado Pago</option>
+                <option>DiDi Food</option><option>WhatsApp / Teléfono</option><option>Otra</option>
               </select>
             </div>
           )}
-
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-
           <button onClick={handleConfirm} disabled={loading}
             className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-bold rounded-xl py-3.5 transition-colors">
             {loading ? 'Procesando...' : 'Confirmar venta'}
@@ -411,7 +646,6 @@ function SuccessModal({ sale, onClose }) {
   const methodLabel = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', plataforma: sale.platform_name }
   const now = new Date()
 
-  // Auto-imprimir después de renderizar
   useEffect(() => {
     const timer = setTimeout(() => window.print(), 600)
     return () => clearTimeout(timer)
@@ -419,7 +653,6 @@ function SuccessModal({ sale, onClose }) {
 
   return (
     <>
-      {/* ── Vista en pantalla ── */}
       <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 no-print">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm text-center p-8">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -434,8 +667,7 @@ function SuccessModal({ sale, onClose }) {
           <div className="text-left bg-gray-50 rounded-xl p-3 mb-4 text-xs space-y-1">
             {sale.items?.map(i => (
               <div key={i.id} className="flex justify-between text-gray-600">
-                <span>{i.name} x{i.qty}</span>
-                <span>{mxn(i.price * i.qty)}</span>
+                <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
               </div>
             ))}
           </div>
@@ -452,7 +684,6 @@ function SuccessModal({ sale, onClose }) {
         </div>
       </div>
 
-      {/* ── Ticket de impresión (solo visible al imprimir) ── */}
       <div className="print-only ticket">
         <div style={{ textAlign: 'center', marginBottom: '8px' }}>
           <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '0' }}>Pizza &amp; Totó</p>
@@ -462,16 +693,13 @@ function SuccessModal({ sale, onClose }) {
           </p>
           {sale.cashier && <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>Cajero: {sale.cashier}</p>}
         </div>
-
         <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '6px 0', margin: '6px 0' }}>
           {sale.items?.map((i, idx) => (
             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px' }}>
-              <span>{i.name} x{i.qty}</span>
-              <span>{mxn(i.price * i.qty)}</span>
+              <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
             </div>
           ))}
         </div>
-
         {sale.discount > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px' }}>
             <span>Descuento</span><span>-{mxn(sale.discount)}</span>
@@ -480,15 +708,12 @@ function SuccessModal({ sale, onClose }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold', borderTop: '1px solid #000', paddingTop: '4px', marginTop: '4px' }}>
           <span>TOTAL</span><span>{mxn(sale.total)}</span>
         </div>
-
         <div style={{ marginTop: '6px', fontSize: '10px' }}>
           <p style={{ margin: '2px 0' }}>Pago: {methodLabel[sale.payment_method]}</p>
           {sale.change > 0 && <p style={{ margin: '2px 0' }}>Cambio: {mxn(sale.change)}</p>}
         </div>
-
         <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '9px', color: '#555' }}>
-          <p>¡Gracias por su visita!</p>
-          <p>Vuelva pronto</p>
+          <p>¡Gracias por su visita!</p><p>Vuelva pronto</p>
         </div>
       </div>
     </>
