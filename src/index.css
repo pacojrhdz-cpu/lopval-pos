@@ -16,10 +16,13 @@
 .print-only { display: none; }
 
 @media print {
-  /* Ocultar toda la app */
-  body > * { display: none !important; }
+  /* Ocultar todo con visibility para que los hijos puedan sobreescribir */
+  * { visibility: hidden !important; }
 
-  /* Mostrar solo el ticket */
+  /* Mostrar ticket y todos sus hijos */
+  .print-only,
+  .print-only * { visibility: visible !important; }
+
   .print-only {
     display: block !important;
     position: fixed;
@@ -27,8 +30,8 @@
     width: 80mm;
     font-family: 'Courier New', Courier, monospace;
     font-size: 11px;
-    color: #000;
-    background: #fff;
+    color: #000 !important;
+    background: #fff !important;
     padding: 8px;
     box-sizing: border-box;
   }
@@ -38,7 +41,6 @@
     max-width: 80mm;
   }
 
-  /* Asegurar que el modal no se imprima */
   .no-print { display: none !important; }
 
   @page {
