@@ -1,23 +1,21 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { mxn } from '../../utils/format'
+import { mxn, fmtDateTime } from '../../utils/format'
 import {
   ShoppingCart, Search, Plus, Minus, Trash2, Tag,
-  CreditCard, Banknote, Smartphone, X, CheckCircle, Clock
+  CreditCard, Banknote, Smartphone, X, CheckCircle, Clock, Printer
 } from 'lucide-react'
 
-// ─── Colores por categoría ────────────────────────────────────
 const CAT_COLORS = {
-  'Pizzas':    'bg-red-100 text-red-700 ring-red-200',
-  'Pastas':    'bg-orange-100 text-orange-700 ring-orange-200',
+  'Pizzas':    'bg-stone-100 text-stone-700 ring-stone-200',
+  'Pastas':    'bg-amber-100 text-amber-700 ring-amber-200',
   'Ensaladas': 'bg-green-100 text-green-700 ring-green-200',
   'Bebidas':   'bg-blue-100 text-blue-700 ring-blue-200',
   'Postres':   'bg-purple-100 text-purple-700 ring-purple-200',
   'Extras':    'bg-yellow-100 text-yellow-700 ring-yellow-200',
 }
 
-// ─── Componente principal POS ─────────────────────────────────
 export default function POS() {
   const { user, profile } = useAuth()
   const [categories, setCategories] = useState([])
@@ -31,7 +29,6 @@ export default function POS() {
   const [lastSale,   setLastSale]   = useState(null)
   const [recentSales,setRecentSales]= useState([])
 
-  // ── Carga inicial ──────────────────────────────────────────
   useEffect(() => {
     fetchCategories()
     fetchProducts()
@@ -51,14 +48,12 @@ export default function POS() {
     setRecentSales(data ?? [])
   }
 
-  // ── Filtros ────────────────────────────────────────────────
   const filtered = products.filter(p => {
     const matchCat = selCat === 'Todos' || p.categories?.name === selCat
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
     return matchCat && matchSearch
   })
 
-  // ── Carrito ────────────────────────────────────────────────
   const addToCart = useCallback((product) => {
     setCart(prev => {
       const idx = prev.findIndex(i => i.id === product.id)
@@ -81,31 +76,28 @@ export default function POS() {
   const removeItem = (id) => setCart(prev => prev.filter(i => i.id !== id))
   const clearCart  = () => { setCart([]); setDiscount(''); setDiscReason('') }
 
-  // ── Totales ────────────────────────────────────────────────
-  const subtotal      = cart.reduce((s, i) => s + i.price * i.qty, 0)
-  const discountAmt   = Math.min(parseFloat(discount) || 0, subtotal)
-  const total         = subtotal - discountAmt
+  const subtotal    = cart.reduce((s, i) => s + i.price * i.qty, 0)
+  const discountAmt = Math.min(parseFloat(discount) || 0, subtotal)
+  const total       = subtotal - discountAmt
 
-  // ── Completar venta ────────────────────────────────────────
   async function completeSale(paymentMethod, platformName, cashReceived) {
     const changeGiven = paymentMethod === 'efectivo' ? (cashReceived - total) : 0
     const { data: sale, error } = await supabase.from('sales').insert({
-      cashier_id:     user?.id,
-      cashier_name:   profile?.name ?? 'Cajero',
+      cashier_id:      user?.id,
+      cashier_name:    profile?.name ?? 'Cajero',
       subtotal,
-      discount:       discountAmt,
-      discount_reason:discReason || null,
+      discount:        discountAmt,
+      discount_reason: discReason || null,
       total,
-      payment_method: paymentMethod,
-      platform_name:  platformName || null,
-      cash_received:  paymentMethod === 'efectivo' ? cashReceived : null,
-      change_given:   paymentMethod === 'efectivo' ? changeGiven : null,
+      payment_method:  paymentMethod,
+      platform_name:   platformName || null,
+      cash_received:   paymentMethod === 'efectivo' ? cashReceived : null,
+      change_given:    paymentMethod === 'efectivo' ? changeGiven : null,
       status: 'completed'
     }).select().single()
 
     if (error) throw error
 
-    // Insertar ítems
     await supabase.from('sale_items').insert(
       cart.map(i => ({
         sale_id:      sale.id,
@@ -117,7 +109,7 @@ export default function POS() {
       }))
     )
 
-    setLastSale({ ...sale, items: cart, change: changeGiven })
+    setLastSale({ ...sale, items: cart, change: changeGiven, cashier: profile?.name ?? 'Cajero' })
     clearCart()
     setShowPayment(false)
     fetchRecentSales()
@@ -125,10 +117,9 @@ export default function POS() {
 
   return (
     <div className="flex h-full">
-      {/* ── Panel izquierdo: productos ── */}
-      <div className="flex-1 flex flex-col overflow-hidden border-r border-gray-200">
+      {/* Panel izquierdo */}
+      <div className="flex-1 flex flex-col overflow-hidden border-r border-gray-200 bg-white">
 
-        {/* Búsqueda */}
         <div className="p-4 bg-white border-b">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -136,12 +127,11 @@ export default function POS() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Buscar producto..."
-              className="w-full pl-9 pr-4 py-2.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+              className="w-full pl-9 pr-4 py-2.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
             />
           </div>
         </div>
 
-        {/* Categorías */}
         <div className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide bg-white border-b">
           {['Todos', ...categories.map(c => c.name)].map(cat => (
             <button
@@ -149,7 +139,7 @@ export default function POS() {
               onClick={() => setSelCat(cat)}
               className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 selCat === cat
-                  ? 'bg-red-600 text-white'
+                  ? 'bg-gray-900 text-white'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
@@ -158,8 +148,7 @@ export default function POS() {
           ))}
         </div>
 
-        {/* Grid de productos */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4" style={{ background: '#faf8f4' }}>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {filtered.map(product => {
               const inCart = cart.find(i => i.id === product.id)
@@ -170,18 +159,17 @@ export default function POS() {
                   onClick={() => addToCart(product)}
                   className={`
                     relative bg-white rounded-2xl p-3 shadow-sm border text-left
-                    hover:shadow-md hover:border-red-300 active:scale-95 transition-all
-                    ${inCart ? 'border-red-400 ring-2 ring-red-200' : 'border-gray-100'}
+                    hover:shadow-md active:scale-95 transition-all
+                    ${inCart ? 'border-gray-800 ring-2 ring-gray-200' : 'border-gray-100 hover:border-gray-300'}
                   `}
                 >
-                  {/* Icono de categoría */}
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-2 ring-1 ${colorCls}`}>
                     {product.categories?.icon ?? '🍽️'}
                   </div>
                   <p className="text-sm font-semibold text-gray-800 leading-tight line-clamp-2">{product.name}</p>
-                  <p className="text-red-600 font-bold mt-1">{mxn(product.price)}</p>
+                  <p className="text-gray-800 font-bold mt-1">{mxn(product.price)}</p>
                   {inCart && (
-                    <span className="absolute top-2 right-2 bg-red-600 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                    <span className="absolute top-2 right-2 bg-gray-900 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
                       {inCart.qty}
                     </span>
                   )}
@@ -197,13 +185,12 @@ export default function POS() {
           </div>
         </div>
 
-        {/* Últimas ventas (pie) */}
         {recentSales.length > 0 && !cart.length && (
-          <div className="px-4 pb-4">
-            <p className="text-xs text-gray-500 mb-2 flex items-center gap-1"><Clock className="w-3 h-3" /> Últimas ventas</p>
+          <div className="px-4 pb-4 bg-white border-t">
+            <p className="text-xs text-gray-500 mt-3 mb-2 flex items-center gap-1"><Clock className="w-3 h-3" /> Últimas ventas</p>
             <div className="flex gap-2 overflow-x-auto scrollbar-hide">
               {recentSales.map(s => (
-                <div key={s.id} className="flex-shrink-0 bg-white border rounded-xl px-3 py-2 text-xs">
+                <div key={s.id} className="flex-shrink-0 bg-gray-50 border rounded-xl px-3 py-2 text-xs">
                   <p className="font-bold text-gray-800">{mxn(s.total)}</p>
                   <p className="text-gray-400">{new Date(s.created_at).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</p>
                 </div>
@@ -213,19 +200,18 @@ export default function POS() {
         )}
       </div>
 
-      {/* ── Panel derecho: carrito ── */}
+      {/* Panel derecho: carrito */}
       <div className="w-80 flex flex-col bg-white">
         <div className="flex items-center gap-2 px-4 py-3 border-b">
-          <ShoppingCart className="w-5 h-5 text-red-600" />
+          <ShoppingCart className="w-5 h-5 text-gray-700" />
           <h2 className="font-semibold text-gray-800">Orden actual</h2>
           {cart.length > 0 && (
-            <button onClick={clearCart} className="ml-auto text-gray-400 hover:text-red-500 transition-colors">
+            <button onClick={clearCart} className="ml-auto text-gray-400 hover:text-gray-700 transition-colors">
               <X className="w-4 h-4" />
             </button>
           )}
         </div>
 
-        {/* Items del carrito */}
         <div className="flex-1 overflow-y-auto">
           {cart.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-300 p-8">
@@ -241,23 +227,14 @@ export default function POS() {
                     <p className="text-xs text-gray-500">{mxn(item.price)} c/u</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => updateQty(item.id, -1)}
-                      className="w-7 h-7 rounded-full bg-gray-200 hover:bg-red-100 flex items-center justify-center transition-colors"
-                    >
+                    <button onClick={() => updateQty(item.id, -1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
                       <Minus className="w-3 h-3" />
                     </button>
                     <span className="w-6 text-center text-sm font-bold">{item.qty}</span>
-                    <button
-                      onClick={() => updateQty(item.id, 1)}
-                      className="w-7 h-7 rounded-full bg-gray-200 hover:bg-green-100 flex items-center justify-center transition-colors"
-                    >
+                    <button onClick={() => updateQty(item.id, 1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
                       <Plus className="w-3 h-3" />
                     </button>
-                    <button
-                      onClick={() => removeItem(item.id)}
-                      className="w-7 h-7 rounded-full hover:bg-red-100 flex items-center justify-center text-gray-400 hover:text-red-500 ml-1 transition-colors"
-                    >
+                    <button onClick={() => removeItem(item.id)} className="w-7 h-7 rounded-full hover:bg-red-100 flex items-center justify-center text-gray-400 hover:text-red-500 ml-1 transition-colors">
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
@@ -268,50 +245,41 @@ export default function POS() {
           )}
         </div>
 
-        {/* Descuento */}
         {cart.length > 0 && (
           <div className="px-3 pb-2 border-t pt-3">
             <div className="flex gap-2 items-center">
               <Tag className="w-4 h-4 text-gray-400 flex-shrink-0" />
               <input
-                type="number"
-                min="0"
-                max={subtotal}
-                value={discount}
+                type="number" min="0" max={subtotal} value={discount}
                 onChange={e => setDiscount(e.target.value)}
                 placeholder="Descuento $"
-                className="flex-1 bg-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                className="flex-1 bg-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
               />
               <input
-                value={discReason}
-                onChange={e => setDiscReason(e.target.value)}
+                value={discReason} onChange={e => setDiscReason(e.target.value)}
                 placeholder="Motivo"
-                className="flex-1 bg-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                className="flex-1 bg-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
               />
             </div>
           </div>
         )}
 
-        {/* Totales y cobrar */}
         {cart.length > 0 && (
           <div className="p-4 border-t space-y-2">
             <div className="flex justify-between text-sm text-gray-500">
-              <span>Subtotal</span>
-              <span>{mxn(subtotal)}</span>
+              <span>Subtotal</span><span>{mxn(subtotal)}</span>
             </div>
             {discountAmt > 0 && (
               <div className="flex justify-between text-sm text-amber-600">
-                <span>Descuento</span>
-                <span>-{mxn(discountAmt)}</span>
+                <span>Descuento</span><span>-{mxn(discountAmt)}</span>
               </div>
             )}
             <div className="flex justify-between font-bold text-lg text-gray-900 border-t pt-2">
-              <span>Total</span>
-              <span className="text-red-600">{mxn(total)}</span>
+              <span>Total</span><span>{mxn(total)}</span>
             </div>
             <button
               onClick={() => setShowPayment(true)}
-              className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold rounded-xl py-3.5 transition-colors text-base"
+              className="w-full bg-gray-900 hover:bg-gray-800 active:bg-black text-white font-bold rounded-xl py-3.5 transition-colors text-base"
             >
               Cobrar {mxn(total)}
             </button>
@@ -319,16 +287,10 @@ export default function POS() {
         )}
       </div>
 
-      {/* ── Modal de pago ── */}
       {showPayment && (
-        <PaymentModal
-          total={total}
-          onClose={() => setShowPayment(false)}
-          onComplete={completeSale}
-        />
+        <PaymentModal total={total} onClose={() => setShowPayment(false)} onComplete={completeSale} />
       )}
 
-      {/* ── Modal de venta exitosa ── */}
       {lastSale && (
         <SuccessModal sale={lastSale} onClose={() => setLastSale(null)} />
       )}
@@ -338,15 +300,15 @@ export default function POS() {
 
 // ─── Modal de Pago ────────────────────────────────────────────
 function PaymentModal({ total, onClose, onComplete }) {
-  const [method,    setMethod]   = useState('efectivo')
-  const [platform,  setPlatform] = useState('')
-  const [cash,      setCash]     = useState('')
-  const [loading,   setLoading]  = useState(false)
-  const [error,     setError]    = useState('')
+  const [method,   setMethod]   = useState('efectivo')
+  const [platform, setPlatform] = useState('')
+  const [cash,     setCash]     = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState('')
 
-  const cashNum  = parseFloat(cash) || 0
-  const change   = cashNum - total
-  const validCash = method !== 'efectivo' || cashNum >= total
+  const cashNum    = parseFloat(cash) || 0
+  const change     = cashNum - total
+  const validCash  = method !== 'efectivo' || cashNum >= total
 
   async function handleConfirm() {
     if (!validCash) { setError('El efectivo recibido es menor al total'); return }
@@ -355,7 +317,7 @@ function PaymentModal({ total, onClose, onComplete }) {
     setError('')
     try {
       await onComplete(method, platform, cashNum)
-    } catch (e) {
+    } catch {
       setError('Error al guardar la venta. Intenta de nuevo.')
       setLoading(false)
     }
@@ -370,20 +332,19 @@ function PaymentModal({ total, onClose, onComplete }) {
         </div>
 
         <div className="p-5 space-y-4">
-          <p className="text-center text-3xl font-black text-red-600">{mxn(total)}</p>
+          <p className="text-center text-3xl font-black text-gray-900">{mxn(total)}</p>
 
-          {/* Selector de método */}
           <div className="grid grid-cols-3 gap-2">
             {[
-              { id: 'efectivo',   icon: Banknote,    label: 'Efectivo' },
-              { id: 'tarjeta',    icon: CreditCard,  label: 'Tarjeta' },
-              { id: 'plataforma', icon: Smartphone,  label: 'Plataforma' },
+              { id: 'efectivo',   icon: Banknote,   label: 'Efectivo'   },
+              { id: 'tarjeta',    icon: CreditCard, label: 'Tarjeta'    },
+              { id: 'plataforma', icon: Smartphone, label: 'Plataforma' },
             ].map(({ id, icon: Icon, label }) => (
               <button
                 key={id}
                 onClick={() => setMethod(id)}
                 className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
-                  method === id ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                  method === id ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-300'
                 }`}
               >
                 <Icon className="w-5 h-5" />
@@ -392,26 +353,19 @@ function PaymentModal({ total, onClose, onComplete }) {
             ))}
           </div>
 
-          {/* Efectivo: monto recibido */}
           {method === 'efectivo' && (
             <div>
               <label className="block text-sm text-gray-600 mb-1">Efectivo recibido</label>
               <input
-                type="number"
-                value={cash}
-                onChange={e => setCash(e.target.value)}
+                type="number" value={cash} onChange={e => setCash(e.target.value)}
                 placeholder="$0.00"
-                className="w-full border rounded-xl px-4 py-2.5 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-red-400"
+                className="w-full border rounded-xl px-4 py-2.5 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-gray-400"
                 autoFocus
               />
-              {/* Billetes rápidos */}
               <div className="flex gap-2 mt-2">
                 {[50,100,200,500].map(v => (
-                  <button
-                    key={v}
-                    onClick={() => setCash(String(v))}
-                    className="flex-1 bg-gray-100 hover:bg-red-100 text-gray-700 hover:text-red-700 rounded-lg py-1.5 text-sm font-medium transition-colors"
-                  >
+                  <button key={v} onClick={() => setCash(String(v))}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-1.5 text-sm font-medium transition-colors">
                     ${v}
                   </button>
                 ))}
@@ -424,15 +378,11 @@ function PaymentModal({ total, onClose, onComplete }) {
             </div>
           )}
 
-          {/* Plataforma */}
           {method === 'plataforma' && (
             <div>
               <label className="block text-sm text-gray-600 mb-1">Plataforma</label>
-              <select
-                value={platform}
-                onChange={e => setPlatform(e.target.value)}
-                className="w-full border rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-red-400"
-              >
+              <select value={platform} onChange={e => setPlatform(e.target.value)}
+                className="w-full border rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-gray-400">
                 <option value="">Seleccionar...</option>
                 <option>Rappi</option>
                 <option>Uber Eats</option>
@@ -446,11 +396,8 @@ function PaymentModal({ total, onClose, onComplete }) {
 
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
 
-          <button
-            onClick={handleConfirm}
-            disabled={loading}
-            className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white font-bold rounded-xl py-3.5 transition-colors"
-          >
+          <button onClick={handleConfirm} disabled={loading}
+            className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-bold rounded-xl py-3.5 transition-colors">
             {loading ? 'Procesando...' : 'Confirmar venta'}
           </button>
         </div>
@@ -459,36 +406,75 @@ function PaymentModal({ total, onClose, onComplete }) {
   )
 }
 
-// ─── Modal de Éxito ───────────────────────────────────────────
+// ─── Modal de Éxito + Ticket ──────────────────────────────────
 function SuccessModal({ sale, onClose }) {
   const methodLabel = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', plataforma: sale.platform_name }
+  const now = new Date()
+
+  // Auto-imprimir después de renderizar
+  useEffect(() => {
+    const timer = setTimeout(() => window.print(), 600)
+    return () => clearTimeout(timer)
+  }, [])
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm text-center p-8">
-        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <CheckCircle className="w-9 h-9 text-green-600" />
+    <>
+      {/* ── Vista en pantalla ── */}
+      <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 no-print">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm text-center p-8">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="w-9 h-9 text-green-600" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800 mb-1">¡Venta registrada!</h2>
+          <p className="text-3xl font-black text-gray-900 mb-3">{mxn(sale.total)}</p>
+          <p className="text-sm text-gray-500 mb-1">Pago: {methodLabel[sale.payment_method]}</p>
+          {sale.change > 0 && (
+            <p className="text-sm font-semibold text-green-700 mb-4">Cambio: {mxn(sale.change)}</p>
+          )}
+          <div className="text-left bg-gray-50 rounded-xl p-3 mb-4 text-xs space-y-1">
+            {sale.items?.map(i => (
+              <div key={i.id} className="flex justify-between text-gray-600">
+                <span>{i.name} x{i.qty}</span>
+                <span>{mxn(i.price * i.qty)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => window.print()}
+              className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-3 text-sm font-medium transition-colors">
+              <Printer className="w-4 h-4" /> Reimprimir
+            </button>
+            <button onClick={onClose}
+              className="flex-1 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl py-3 transition-colors">
+              Nueva venta
+            </button>
+          </div>
         </div>
-        <h2 className="text-xl font-bold text-gray-800 mb-1">¡Venta registrada!</h2>
-        <p className="text-3xl font-black text-red-600 mb-3">{mxn(sale.total)}</p>
-        <p className="text-sm text-gray-500 mb-1">Pago: {methodLabel[sale.payment_method]}</p>
-        {sale.change > 0 && (
-          <p className="text-sm font-semibold text-green-700 mb-4">Cambio: {mxn(sale.change)}</p>
-        )}
-        <div className="text-left bg-gray-50 rounded-xl p-3 mb-4 text-xs space-y-1">
-          {sale.items?.map(i => (
-            <div key={i.id} className="flex justify-between text-gray-600">
+      </div>
+
+      {/* ── Ticket de impresión (solo visible al imprimir) ── */}
+      <div className="print-only ticket">
+        <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+          <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '0' }}>Pizza &amp; Totó</p>
+          <p style={{ fontSize: '10px', margin: '2px 0' }}>Grupo Lopval</p>
+          <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>
+            {now.toLocaleDateString('es-MX')} {now.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})}
+          </p>
+          {sale.cashier && <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>Cajero: {sale.cashier}</p>}
+        </div>
+
+        <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '6px 0', margin: '6px 0' }}>
+          {sale.items?.map((i, idx) => (
+            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px' }}>
               <span>{i.name} x{i.qty}</span>
               <span>{mxn(i.price * i.qty)}</span>
             </div>
           ))}
         </div>
-        <button
-          onClick={onClose}
-          className="w-full bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl py-3 transition-colors"
-        >
-          Nueva venta
-        </button>
-      </div>
-    </div>
-  )
-}
+
+        {sale.discount > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px' }}>
+            <span>Descuento</span><span>-{mxn(sale.discount)}</span>
+          </div>
+        )}
+        <div style={{ display: 'flex', justifyConte
