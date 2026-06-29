@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Login             from './pages/Login'
+import BranchSelector   from './pages/BranchSelector'
 import Layout            from './components/shared/Layout'
 import POS               from './pages/pos/POS'
 import Requisition       from './pages/pos/Requisition'
@@ -26,6 +27,12 @@ function PrivateRoute({ children }) {
   return user ? children : <Navigate to="/login" replace />
 }
 
+function BranchRoute({ children }) {
+  const { activeBranch, loading } = useAuth()
+  if (loading) return null
+  return activeBranch ? children : <Navigate to="/select-branch" replace />
+}
+
 function AdminRoute({ children }) {
   const { isAdmin, loading } = useAuth()
   if (loading) return null
@@ -35,7 +42,9 @@ function AdminRoute({ children }) {
 function W({ children }) {
   return (
     <PrivateRoute>
-      <Layout>{children}</Layout>
+      <BranchRoute>
+        <Layout>{children}</Layout>
+      </BranchRoute>
     </PrivateRoute>
   )
 }
@@ -43,9 +52,11 @@ function W({ children }) {
 function A({ children }) {
   return (
     <PrivateRoute>
-      <AdminRoute>
-        <Layout>{children}</Layout>
-      </AdminRoute>
+      <BranchRoute>
+        <AdminRoute>
+          <Layout>{children}</Layout>
+        </AdminRoute>
+      </BranchRoute>
     </PrivateRoute>
   )
 }
@@ -53,7 +64,8 @@ function A({ children }) {
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/login"         element={<Login />} />
+      <Route path="/select-branch" element={<PrivateRoute><BranchSelector /></PrivateRoute>} />
 
       {/* Cajero + Admin */}
       <Route path="/pos"              element={<W><POS /></W>} />
