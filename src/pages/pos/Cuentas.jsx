@@ -6,7 +6,7 @@ import { BookOpen, Plus, Clock, ChevronRight, X } from 'lucide-react'
 import { mxn } from '../../utils/format'
 
 export default function Cuentas() {
-  const { user, profile } = useAuth()
+  const { user, profile, activeBranch } = useAuth()
   const navigate = useNavigate()
   const [accounts,  setAccounts]  = useState([])
   const [loading,   setLoading]   = useState(true)
@@ -18,11 +18,13 @@ export default function Cuentas() {
 
   async function fetchAccounts() {
     setLoading(true)
-    const { data } = await supabase
+    let q = supabase
       .from('accounts')
       .select('*, account_items(id, product_name, quantity, unit_price)')
       .eq('status', 'open')
       .order('created_at', { ascending: false })
+    if (activeBranch?.id) q = q.eq('branch_id', activeBranch.id)
+    const { data } = await q
     setAccounts(data ?? [])
     setLoading(false)
   }
@@ -35,6 +37,8 @@ export default function Cuentas() {
       table_name:   tableName.trim(),
       cashier_id:   user?.id,
       cashier_name: profile?.name ?? 'Cajero',
+      branch_id:    activeBranch?.id   ?? null,
+      branch_name:  activeBranch?.name ?? null,
       status:       'open',
     }).select().single()
     setCreating(false)
