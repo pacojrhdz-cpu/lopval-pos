@@ -1,124 +1,62 @@
 import { useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
-import { useAuth } from '../../contexts/AuthContext'
-import {
-  ShoppingCart, LayoutDashboard, Package, BookOpen,
-  Warehouse, BarChart2, ClipboardList, LogOut, Menu,
-  ClipboardCheck, Scissors
-} from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 
-const adminLinks = [
-  { to: '/admin',               icon: LayoutDashboard, label: 'Dashboard',      exact: true },
-  { to: '/admin/ventas',        icon: ClipboardList,   label: 'Ventas'          },
-  { to: '/admin/estadisticas',  icon: BarChart2,       label: 'Estadísticas'    },
-  { to: '/admin/cortes',        icon: Scissors,        label: 'Cortes de Caja'  },
-  { to: '/admin/cuentas',       icon: BookOpen,        label: 'Cuentas'         },
-  { to: '/admin/productos',     icon: Package,         label: 'Productos'       },
-  { to: '/admin/recetas',       icon: BookOpen,        label: 'Recetas'         },
-  { to: '/admin/inventario',    icon: Warehouse,       label: 'Inventario'      },
-  { to: '/admin/requisiciones', icon: ClipboardCheck,  label: 'Requisiciones'   },
-]
-
-export default function Layout({ children }) {
-  const { profile, isAdmin, signOut } = useAuth()
+export default function Login() {
+  const { signIn, isAdmin } = useAuth()
   const navigate = useNavigate()
-  const [open, setOpen] = useState(false)
+  const [email,    setEmail]    = useState('')
+  const [password, setPassword] = useState('')
+  const [error,    setError]    = useState('')
+  const [loading,  setLoading]  = useState(false)
 
-  async function handleSignOut() {
-    await signOut()
-    navigate('/login')
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      await signIn(email, password)
+      navigate(isAdmin ? '/admin' : '/pos', { replace: true })
+    } catch (err) {
+      setError('Correo o contraseña incorrectos')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const navCls = ({ isActive }) =>
-    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-      isActive
-        ? 'bg-white/15 text-white font-medium'
-        : 'text-gray-400 hover:bg-white/10 hover:text-white'
-    }`
-
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: '#faf8f4' }}>
-      {/* Sidebar */}
-      <aside className={`
-        fixed inset-y-0 left-0 z-50 w-56 flex flex-col transition-transform
-        lg:static lg:translate-x-0
-        ${open ? 'translate-x-0' : '-translate-x-full'}
-      `} style={{ background: '#111111' }}>
-
-        {/* Logo */}
-        <div className="flex flex-col items-center px-4 py-5 border-b border-white/10">
-          <img src="/logo.svg" alt="Pizza & Totó" className="w-32 h-20 object-contain" style={{ filter: 'invert(1)' }} />
-          {profile?.name && (
-            <p className="text-gray-400 text-xs mt-1 truncate">{profile.name}</p>
-          )}
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#faf8f4' }}>
+      <div className="w-full max-w-sm">
+        <div className="flex flex-col items-center mb-8">
+          <div className="mb-2 w-52 h-36 flex items-center justify-center">
+            <img src="/logo.svg" alt="Pizza y Toto" className="w-full h-full object-contain" />
+          </div>
+          <p className="text-gray-500 text-sm mt-1">Sistema de Punto de Venta</p>
         </div>
-
-        {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
-          {/* POS — siempre visible */}
-          <NavLink to="/pos" end className={navCls}>
-            <ShoppingCart className="w-4 h-4 flex-shrink-0" />
-            Punto de Venta
-          </NavLink>
-
-          {/* Cuentas — visible para todos */}
-          <NavLink to="/pos/cuentas" className={navCls}>
-            <BookOpen className="w-4 h-4 flex-shrink-0" />
-            Cuentas
-          </NavLink>
-
-          {/* Requisición — visible para todos */}
-          <NavLink to="/pos/requisicion" className={navCls}>
-            <ClipboardCheck className="w-4 h-4 flex-shrink-0" />
-            Requisición
-          </NavLink>
-
-          {/* Links de admin */}
-          {isAdmin && (
-            <>
-              <div className="px-3 pt-4 pb-1">
-                <p className="text-gray-600 text-xs uppercase tracking-wider">Administración</p>
-              </div>
-              {adminLinks.map(({ to, icon: Icon, label, exact }) => (
-                <NavLink key={to} to={to} end={exact} className={navCls}>
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  {label}
-                </NavLink>
-              ))}
-            </>
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-6 shadow-lg space-y-4" style={{ border: '1px solid #e5e1d8' }}>
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-3 text-sm">
+              {error}
+            </div>
           )}
-        </nav>
-
-        {/* Footer */}
-        <div className="p-2 border-t border-white/10">
-          <button
-            onClick={handleSignOut}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:bg-white/10 hover:text-white transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Cerrar sesión
+          <div>
+            <label className="block text-gray-600 text-sm mb-1">Correo electrónico</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+              className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400"
+              placeholder="usuario@lopval.com" />
+          </div>
+          <div>
+            <label className="block text-gray-600 text-sm mb-1">Contraseña</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
+              className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400"
+              placeholder="••••••••" />
+          </div>
+          <button type="submit" disabled={loading}
+            className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-semibold rounded-lg py-3 transition-colors">
+            {loading ? 'Ingresando...' : 'Ingresar'}
           </button>
-        </div>
-      </aside>
-
-      {/* Overlay móvil */}
-      {open && (
-        <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setOpen(false)} />
-      )}
-
-      {/* Contenido principal */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar móvil */}
-        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b shadow-sm">
-          <button onClick={() => setOpen(true)} className="text-gray-600">
-            <Menu className="w-6 h-6" />
-          </button>
-          <img src="/logo.svg" alt="Pizza & Totó" className="h-8 object-contain" />
-        </header>
-
-        <main className="flex-1 overflow-auto">
-          {children}
-        </main>
+        </form>
+        <p className="text-center text-gray-400 text-xs mt-6">Grupo Lopval © {new Date().getFullYear()}</p>
       </div>
     </div>
   )
