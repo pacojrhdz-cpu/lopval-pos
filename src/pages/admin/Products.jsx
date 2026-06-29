@@ -1,28 +1,34 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import { mxn } from '../../utils/format'
 import { Plus, Pencil, Trash2, X, Check, Search } from 'lucide-react'
 
 const EMPTY_PRODUCT = { name: '', description: '', category_id: '', price: '', active: true }
 
 export default function Products() {
+  const { activeBranch } = useAuth()
   const [products,    setProducts]   = useState([])
   const [categories,  setCategories] = useState([])
   const [loading,     setLoading]    = useState(true)
   const [search,      setSearch]     = useState('')
-  const [editing,     setEditing]    = useState(null)   // null | 'new' | product object
+  const [editing,     setEditing]    = useState(null)
   const [form,        setForm]       = useState(EMPTY_PRODUCT)
   const [saving,      setSaving]     = useState(false)
   const [error,       setError]      = useState('')
 
-  useEffect(() => {
-    fetchAll()
-  }, [])
+  useEffect(() => { fetchAll() }, [activeBranch])
 
   async function fetchAll() {
+    setLoading(true)
+    const branchId = activeBranch?.id
     const [{ data: p }, { data: c }] = await Promise.all([
-      supabase.from('products').select('*, categories(name,icon)').order('name'),
-      supabase.from('categories').select('*').eq('active', true).order('sort_order'),
+      branchId
+        ? supabase.from('products').select('*, categories(name,icon)').eq('branch_id', branchId).order('name')
+        : supabase.from('products').select('*, categories(name,icon)').order('name'),
+      branchId
+        ? supabase.from('categories').select('*').eq('active', true).eq('branch_id', branchId).order('sort_order')
+        : supabase.from('categories').select('*').eq('active', true).order('sort_order'),
     ])
     setProducts(p ?? [])
     setCategories(c ?? [])
@@ -60,6 +66,7 @@ export default function Products() {
       price:       parseFloat(form.price),
       active:      form.active,
       updated_at:  new Date().toISOString(),
+      ...(editing === 'new' && activeBranch?.id ? { branch_id: activeBranch.id } : {}),
     }
 
     let err
@@ -93,7 +100,10 @@ export default function Products() {
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Productos</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Productos</h1>
+          {activeBranch && <p className="text-sm text-gray-500 mt-0.5">{activeBranch.name}</p>}
+        </div>
         <button onClick={openNew}
           className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm transition-colors">
           <Plus className="w-4 h-4" /> Nuevo producto
