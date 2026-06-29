@@ -19,7 +19,7 @@ const CAT_COLORS = {
 }
 
 export default function POS() {
-  const { user, profile } = useAuth()
+  const { user, profile, activeBranch } = useAuth()
   const navigate = useNavigate()
   const [categories,       setCategories]       = useState([])
   const [products,         setProducts]         = useState([])
@@ -56,11 +56,15 @@ export default function POS() {
   }
 
   async function fetchCategories() {
-    const { data } = await supabase.from('categories').select('*').eq('active', true).order('sort_order')
+    let q = supabase.from('categories').select('*').eq('active', true).order('sort_order')
+    if (activeBranch?.id) q = q.eq('branch_id', activeBranch.id)
+    const { data } = await q
     setCategories(data ?? [])
   }
   async function fetchProducts() {
-    const { data } = await supabase.from('products').select('*, categories(name,icon,color)').eq('active', true).order('name')
+    let q = supabase.from('products').select('*, categories(name,icon,color)').eq('active', true).order('name')
+    if (activeBranch?.id) q = q.eq('branch_id', activeBranch.id)
+    const { data } = await q
     setProducts(data ?? [])
   }
   async function fetchRecentSales() {
@@ -100,6 +104,8 @@ export default function POS() {
       cashier_id:       user?.id,
       cashier_name:     profile?.name ?? 'Cajero',
       cash_register_id: cashRegister?.id ?? null,
+      branch_id:        activeBranch?.id ?? null,
+      branch_name:      activeBranch?.name ?? null,
       subtotal,
       discount:         discountAmt,
       discount_reason:  discReason || null,
@@ -124,7 +130,7 @@ export default function POS() {
       }))
     )
 
-    setLastSale({ ...sale, items: cart, change: changeGiven, cashier: profile?.name ?? 'Cajero' })
+    setLastSale({ ...sale, items: cart, change: changeGiven, cashier: profile?.name ?? 'Cajero', branchName: activeBranch?.name })
     clearCart()
     setShowPayment(false)
     fetchRecentSales()
@@ -145,6 +151,8 @@ export default function POS() {
       <AperturaOverlay
         userId={user?.id}
         cashierName={profile?.name ?? 'Cajero'}
+        branchId={activeBranch?.id}
+        branchName={activeBranch?.name}
         onOpen={reg => setCashRegister(reg)}
       />
     )
@@ -346,7 +354,7 @@ export default function POS() {
 }
 
 // ─── Apertura de Caja ─────────────────────────────────────────
-function AperturaOverlay({ userId, cashierName, onOpen }) {
+function AperturaOverlay({ userId, cashierName, branchId, branchName, onOpen }) {
   const [amount, setAmount] = useState('')
   const [notes,  setNotes]  = useState('')
   const [saving, setSaving] = useState(false)
@@ -361,6 +369,8 @@ function AperturaOverlay({ userId, cashierName, onOpen }) {
     const { data, error: err } = await supabase.from('cash_registers').insert({
       cashier_id:     userId,
       cashier_name:   cashierName,
+      branch_id:      branchId   || null,
+      branch_name:    branchName || null,
       opening_amount: amt,
       notes:          notes || null,
       status:         'open',
@@ -686,7 +696,7 @@ function SuccessModal({ sale, onClose }) {
 
       <div className="print-only ticket">
         <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-          <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '0' }}>Pizza &amp; Totó</p>
+          <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '0' }}>{sale.branchName ?? 'Pizza & Totó'}</p>
           <p style={{ fontSize: '10px', margin: '2px 0' }}>Grupo Lopval</p>
           <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>
             {now.toLocaleDateString('es-MX')} {now.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})}
