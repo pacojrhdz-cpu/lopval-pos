@@ -6,7 +6,7 @@ import { mxn } from '../../utils/format'
 import {
   ShoppingCart, Search, Plus, Minus, Trash2, Tag,
   CreditCard, Banknote, Smartphone, X, CheckCircle, Clock,
-  Printer, BookOpen, Scissors
+  Printer, BookOpen, Scissors, Package
 } from 'lucide-react'
 
 const CAT_COLORS = {
@@ -23,6 +23,7 @@ export default function POS() {
   const navigate = useNavigate()
   const [categories,       setCategories]       = useState([])
   const [products,         setProducts]         = useState([])
+  const [productsWithMods, setProductsWithMods] = useState(new Set())
   const [selCat,           setSelCat]           = useState('Todos')
   const [search,           setSearch]           = useState('')
   const [cart,             setCart]             = useState([])
@@ -34,13 +35,16 @@ export default function POS() {
   const [cashRegister,     setCashRegister]     = useState(null)
   const [checkingRegister, setCheckingRegister] = useState(true)
   const [showCorte,        setShowCorte]        = useState(false)
+  // modifier modal
+  const [modProduct,       setModProduct]       = useState(null)
 
   useEffect(() => {
     fetchCategories()
     fetchProducts()
     fetchRecentSales()
+    fetchProductsWithMods()
     if (user) fetchCashRegister()
-  }, [user])
+  }, [user, activeBranch])
 
   async function fetchCashRegister() {
     const { data } = await supabase
@@ -61,12 +65,22 @@ export default function POS() {
     const { data } = await q
     setCategories(data ?? [])
   }
+
   async function fetchProducts() {
     let q = supabase.from('products').select('*, categories(name,icon,color)').eq('active', true).order('name')
     if (activeBranch?.id) q = q.eq('branch_id', activeBranch.id)
     const { data } = await q
     setProducts(data ?? [])
   }
+
+  async function fetchProductsWithMods() {
+    const { data } = await supabase
+      .from('modifier_groups')
+      .select('product_id')
+      .eq('active', true)
+    setProductsWithMods(new Set((data ?? []).map(g => g.product_id)))
+  }
+
   async function fetchRecentSales() {
     const { data } = await supabase.from('sales').select('id,created_at,total,payment_method').order('created_at', { ascending: false }).limit(5)
     setRecentSales(data ?? [])
@@ -78,21 +92,43 @@ export default function POS() {
     return matchCat && matchSearch
   })
 
-  const addToCart = useCallback((product) => {
+  // Cart key includes modifier IDs so same product + different mods = different cart entries
+  const addToCart = useCallback((product, selectedModifiers = []) => {
+    const modKey  = selectedModifiers.length > 0
+      ? '|' + [...selectedModifiers].map(m => m.id).sort().join(',')
+      : ''
+    const cartKey   = product.id + modKey
+    const extraPrice = selectedModifiers.reduce((s, m) => s + Number(m.price_extra || 0), 0)
+
     setCart(prev => {
-      const idx = prev.findIndex(i => i.id === product.id)
+      const idx = prev.findIndex(i => i.cartKey === cartKey)
       if (idx >= 0) {
         const next = [...prev]
         next[idx] = { ...next[idx], qty: next[idx].qty + 1 }
         return next
       }
-      return [...prev, { ...product, qty: 1 }]
+      return [...prev, {
+        ...product,
+        cartKey,
+        price: product.price + extraPrice,
+        basePrice: product.price,
+        selectedModifiers,
+        qty: 1,
+      }]
     })
   }, [])
 
-  const updateQty  = (id, delta) => setCart(prev => prev.map(i => i.id === id ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0))
-  const removeItem = (id)        => setCart(prev => prev.filter(i => i.id !== id))
-  const clearCart  = ()          => { setCart([]); setDiscount(''); setDiscReason('') }
+  function handleProductClick(product) {
+    if (productsWithMods.has(product.id)) {
+      setModProduct(product)
+    } else {
+      addToCart(product)
+    }
+  }
+
+  const updateQty  = (cartKey, delta) => setCart(prev => prev.map(i => i.cartKey === cartKey ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0))
+  const removeItem = (cartKey)        => setCart(prev => prev.filter(i => i.cartKey !== cartKey))
+  const clearCart  = ()               => { setCart([]); setDiscount(''); setDiscReason('') }
 
   const subtotal    = cart.reduce((s, i) => s + i.price * i.qty, 0)
   const discountAmt = Math.min(parseFloat(discount) || 0, subtotal)
@@ -120,14 +156,18 @@ export default function POS() {
     if (error) throw error
 
     await supabase.from('sale_items').insert(
-      cart.map(i => ({
-        sale_id:      sale.id,
-        product_id:   i.id,
-        product_name: i.name,
-        quantity:     i.qty,
-        unit_price:   i.price,
-        subtotal:     i.price * i.qty,
-      }))
+      cart.map(i => {
+        const modNames = (i.selectedModifiers ?? []).map(m => m.name)
+        const displayName = modNames.length > 0 ? `${i.name} [${modNames.join(', ')}]` : i.name
+        return {
+          sale_id:      sale.id,
+          product_id:   i.id,
+          product_name: displayName,
+          quantity:     i.qty,
+          unit_price:   i.price,
+          subtotal:     i.price * i.qty,
+        }
+      })
     )
 
     setLastSale({ ...sale, items: cart, change: changeGiven, cashier: profile?.name ?? 'Cajero', branchName: activeBranch?.name })
@@ -136,7 +176,6 @@ export default function POS() {
     fetchRecentSales()
   }
 
-  // ── Loading ──
   if (checkingRegister) {
     return (
       <div className="min-h-full flex items-center justify-center" style={{ background: '#faf8f4' }}>
@@ -145,7 +184,6 @@ export default function POS() {
     )
   }
 
-  // ── Apertura de caja obligatoria ──
   if (!cashRegister) {
     return (
       <AperturaOverlay
@@ -206,10 +244,11 @@ export default function POS() {
             {filtered.map(product => {
               const inCart   = cart.find(i => i.id === product.id)
               const colorCls = CAT_COLORS[product.categories?.name] ?? 'bg-gray-100 text-gray-700 ring-gray-200'
+              const hasMods  = productsWithMods.has(product.id)
               return (
                 <button
                   key={product.id}
-                  onClick={() => addToCart(product)}
+                  onClick={() => handleProductClick(product)}
                   className={`
                     relative bg-white rounded-2xl p-3 shadow-sm border text-left
                     hover:shadow-md active:scale-95 transition-all
@@ -217,10 +256,15 @@ export default function POS() {
                   `}
                 >
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-2 ring-1 ${colorCls}`}>
-                    {product.categories?.icon ?? '🍽️'}
+                    {product.is_combo ? '📦' : (product.categories?.icon ?? '🍽️')}
                   </div>
                   <p className="text-sm font-semibold text-gray-800 leading-tight line-clamp-2">{product.name}</p>
                   <p className="text-gray-800 font-bold mt-1">{mxn(product.price)}</p>
+                  {hasMods && (
+                    <span className="absolute bottom-2 right-2 text-gray-400" title="Tiene modificadores">
+                      <Sliders className="w-3 h-3" />
+                    </span>
+                  )}
                   {inCart && (
                     <span className="absolute top-2 right-2 bg-gray-900 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
                       {inCart.qty}
@@ -274,24 +318,29 @@ export default function POS() {
           ) : (
             <div className="p-3 space-y-2">
               {cart.map(item => (
-                <div key={item.id} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2">
+                <div key={item.cartKey} className="flex items-start gap-2 bg-gray-50 rounded-xl p-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                    {item.selectedModifiers?.length > 0 && (
+                      <p className="text-xs text-gray-400 mt-0.5 truncate">
+                        {item.selectedModifiers.map(m => m.name).join(', ')}
+                      </p>
+                    )}
                     <p className="text-xs text-gray-500">{mxn(item.price)} c/u</p>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => updateQty(item.id, -1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <button onClick={() => updateQty(item.cartKey, -1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
                       <Minus className="w-3 h-3" />
                     </button>
                     <span className="w-6 text-center text-sm font-bold">{item.qty}</span>
-                    <button onClick={() => updateQty(item.id, 1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
+                    <button onClick={() => updateQty(item.cartKey, 1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
                       <Plus className="w-3 h-3" />
                     </button>
-                    <button onClick={() => removeItem(item.id)} className="w-7 h-7 rounded-full hover:bg-red-100 flex items-center justify-center text-gray-400 hover:text-red-500 ml-1 transition-colors">
+                    <button onClick={() => removeItem(item.cartKey)} className="w-7 h-7 rounded-full hover:bg-red-100 flex items-center justify-center text-gray-400 hover:text-red-500 ml-1 transition-colors">
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
-                  <p className="text-sm font-bold text-gray-800 w-14 text-right">{mxn(item.price * item.qty)}</p>
+                  <p className="text-sm font-bold text-gray-800 w-14 text-right mt-0.5">{mxn(item.price * item.qty)}</p>
                 </div>
               ))}
             </div>
@@ -340,15 +389,173 @@ export default function POS() {
         )}
       </div>
 
-      {showPayment && <PaymentModal total={total} onClose={() => setShowPayment(false)} onComplete={completeSale} />}
-      {lastSale    && <SuccessModal sale={lastSale} onClose={() => setLastSale(null)} />}
-      {showCorte   && (
+      {modProduct   && <ModifierModal product={modProduct} onClose={() => setModProduct(null)} onConfirm={(mods) => { addToCart(modProduct, mods); setModProduct(null) }} />}
+      {showPayment  && <PaymentModal total={total} onClose={() => setShowPayment(false)} onComplete={completeSale} />}
+      {lastSale     && <SuccessModal sale={lastSale} onClose={() => setLastSale(null)} />}
+      {showCorte    && (
         <CorteModal
           cashRegister={cashRegister}
           onClose={() => setShowCorte(false)}
           onClosed={() => { setCashRegister(null); setCheckingRegister(false); setShowCorte(false) }}
         />
       )}
+    </div>
+  )
+}
+
+// ─── Modal selector de modificadores ─────────────────────────────────────────
+function ModifierModal({ product, onClose, onConfirm }) {
+  const [groups,   setGroups]   = useState([])
+  const [selected, setSelected] = useState({}) // groupId → Set of modifier ids
+  const [loading,  setLoading]  = useState(true)
+  const [comboItems, setComboItems] = useState([])
+
+  useEffect(() => {
+    async function load() {
+      const [{ data: gData }, { data: cData }] = await Promise.all([
+        supabase.from('modifier_groups').select('*, modifiers(*)').eq('product_id', product.id).eq('active', true).order('sort_order'),
+        supabase.from('combo_items').select('*, products(name)').eq('combo_product_id', product.id),
+      ])
+      setGroups(gData ?? [])
+      setComboItems(cData ?? [])
+      setLoading(false)
+    }
+    load()
+  }, [product.id])
+
+  function toggle(group, mod) {
+    setSelected(prev => {
+      const cur = new Set(prev[group.id] ?? [])
+      if (group.multi_select) {
+        cur.has(mod.id) ? cur.delete(mod.id) : cur.add(mod.id)
+      } else {
+        cur.clear()
+        cur.add(mod.id)
+      }
+      return { ...prev, [group.id]: cur }
+    })
+  }
+
+  function getModObj(id) {
+    for (const g of groups) {
+      const m = g.modifiers?.find(x => x.id === id)
+      if (m) return m
+    }
+    return null
+  }
+
+  function handleConfirm() {
+    const allMods = []
+    for (const g of groups) {
+      const selIds = selected[g.id] ?? new Set()
+      if (g.required && selIds.size === 0) {
+        alert(`Debes elegir una opción en "${g.name}"`)
+        return
+      }
+      for (const id of selIds) {
+        const mod = getModObj(id)
+        if (mod) allMods.push(mod)
+      }
+    }
+    onConfirm(allMods)
+  }
+
+  const extraTotal = Object.values(selected).flatMap(s => [...s]).reduce((sum, id) => {
+    const mod = getModObj(id)
+    return sum + Number(mod?.price_extra ?? 0)
+  }, 0)
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b">
+          <div>
+            <h2 className="font-bold text-gray-800">{product.name}</h2>
+            <p className="text-sm text-gray-500 mt-0.5">Personaliza tu pedido</p>
+          </div>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {loading ? (
+            <p className="text-center text-gray-400 py-4">Cargando opciones...</p>
+          ) : (
+            <>
+              {/* Contenido de combo */}
+              {comboItems.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">📦 Este combo incluye</p>
+                  <div className="bg-gray-50 rounded-xl p-3 space-y-1">
+                    {comboItems.map(ci => (
+                      <div key={ci.id} className="flex justify-between text-sm text-gray-700">
+                        <span>{ci.products?.name}</span>
+                        <span className="text-gray-400">× {ci.quantity}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Grupos de modificadores */}
+              {groups.map(g => (
+                <div key={g.id}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className="text-sm font-semibold text-gray-800">{g.name}</p>
+                    {g.required
+                      ? <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">Obligatorio</span>
+                      : <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">Opcional</span>
+                    }
+                    {g.multi_select && <span className="text-xs text-gray-400">· Puedes elegir varios</span>}
+                  </div>
+                  <div className="space-y-2">
+                    {(g.modifiers ?? []).filter(m => m.active).sort((a,b) => a.sort_order - b.sort_order).map(mod => {
+                      const sel = selected[g.id]?.has(mod.id)
+                      return (
+                        <button key={mod.id} onClick={() => toggle(g, mod)}
+                          className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border-2 text-sm transition-all ${
+                            sel ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300'
+                          }`}>
+                          <span className="font-medium text-gray-800">{mod.name}</span>
+                          <div className="flex items-center gap-2">
+                            {mod.price_extra > 0 && (
+                              <span className="text-green-700 font-medium">+{mxn(mod.price_extra)}</span>
+                            )}
+                            {mod.price_extra === 0 && <span className="text-gray-400">Gratis</span>}
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${sel ? 'bg-gray-900 border-gray-900' : 'border-gray-300'}`}>
+                              {sel && <div className="w-2 h-2 bg-white rounded-full" />}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+
+        <div className="p-5 border-t space-y-3">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Precio base</span>
+            <span className="font-medium text-gray-800">{mxn(product.price)}</span>
+          </div>
+          {extraTotal > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Extras</span>
+              <span className="font-medium text-green-700">+{mxn(extraTotal)}</span>
+            </div>
+          )}
+          <div className="flex justify-between font-bold text-gray-900 border-t pt-2">
+            <span>Total</span>
+            <span>{mxn(product.price + extraTotal)}</span>
+          </div>
+          <button onClick={handleConfirm}
+            className="w-full bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl py-3 transition-colors">
+            Agregar al carrito
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -364,8 +571,7 @@ function AperturaOverlay({ userId, cashierName, branchId, branchName, onOpen }) 
     e.preventDefault()
     const amt = parseFloat(amount)
     if (isNaN(amt) || amt < 0) { setError('Ingresa un monto válido'); return }
-    setSaving(true)
-    setError('')
+    setSaving(true); setError('')
     const { data, error: err } = await supabase.from('cash_registers').insert({
       cashier_id:     userId,
       cashier_name:   cashierName,
@@ -389,33 +595,23 @@ function AperturaOverlay({ userId, cashierName, branchId, branchName, onOpen }) 
           <h1 className="text-xl font-bold text-gray-900">Apertura de caja</h1>
           <p className="text-sm text-gray-500 mt-1">Ingresa el efectivo en caja al iniciar tu turno</p>
         </div>
-
         <form onSubmit={handleOpen} className="space-y-4">
           <div>
             <label className="block text-sm text-gray-600 mb-1.5">Efectivo en caja</label>
-            <input
-              type="number" min="0" step="0.01" value={amount}
-              onChange={e => setAmount(e.target.value)}
-              placeholder="$0.00"
-              autoFocus
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-2xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-gray-400"
-            />
+            <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
+              placeholder="$0.00" autoFocus
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-2xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-gray-400" />
             <div className="grid grid-cols-4 gap-2 mt-2">
               {[0, 200, 500, 1000].map(v => (
                 <button key={v} type="button" onClick={() => setAmount(String(v))}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-1.5 text-sm font-medium transition-colors">
-                  ${v}
-                </button>
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-1.5 text-sm font-medium transition-colors">${v}</button>
               ))}
             </div>
           </div>
           <div>
             <label className="block text-sm text-gray-600 mb-1.5">Notas (opcional)</label>
-            <input
-              value={notes} onChange={e => setNotes(e.target.value)}
-              placeholder="Observaciones del turno"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-            />
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Observaciones del turno"
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400" />
           </div>
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <button type="submit" disabled={saving}
@@ -441,23 +637,15 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
 
   async function fetchSummary() {
     setLoading(true)
-    const { data } = await supabase
-      .from('sales')
-      .select('total,payment_method')
-      .eq('cash_register_id', cashRegister.id)
-      .eq('status', 'completed')
-
+    const { data } = await supabase.from('sales').select('total,payment_method').eq('cash_register_id', cashRegister.id).eq('status', 'completed')
     const s = (data ?? []).reduce((acc, sale) => {
-      acc.total      += Number(sale.total)
-      acc.count      += 1
+      acc.total      += Number(sale.total); acc.count += 1
       if (sale.payment_method === 'efectivo')   acc.efectivo   += Number(sale.total)
       if (sale.payment_method === 'tarjeta')    acc.tarjeta    += Number(sale.total)
       if (sale.payment_method === 'plataforma') acc.plataforma += Number(sale.total)
       return acc
     }, { total: 0, count: 0, efectivo: 0, tarjeta: 0, plataforma: 0 })
-
-    setSummary(s)
-    setLoading(false)
+    setSummary(s); setLoading(false)
   }
 
   async function handleClose() {
@@ -467,15 +655,10 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
     const expectedCash = Number(cashRegister.opening_amount) + (summary?.efectivo ?? 0)
     const difference   = amt - expectedCash
     await supabase.from('cash_registers').update({
-      status:         'closed',
-      closing_amount: amt,
-      closing_at:     new Date().toISOString(),
-      total_sales:    summary?.total     ?? 0,
-      total_cash:     summary?.efectivo  ?? 0,
-      total_card:     summary?.tarjeta   ?? 0,
-      total_platform: summary?.plataforma ?? 0,
-      difference,
-      notes: notes || null,
+      status: 'closed', closing_amount: amt, closing_at: new Date().toISOString(),
+      total_sales: summary?.total ?? 0, total_cash: summary?.efectivo ?? 0,
+      total_card: summary?.tarjeta ?? 0, total_platform: summary?.plataforma ?? 0,
+      difference, notes: notes || null,
     }).eq('id', cashRegister.id)
     onClosed()
   }
@@ -488,12 +671,9 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b">
-          <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2">
-            <Scissors className="w-5 h-5" /> Corte de caja
-          </h2>
+          <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2"><Scissors className="w-5 h-5" /> Corte de caja</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
         </div>
-
         {loading ? (
           <div className="p-8 text-center text-gray-400 animate-pulse">Calculando resumen...</div>
         ) : (
@@ -504,46 +684,29 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
               <Row label="Ventas en efectivo"  value={mxn(summary.efectivo)}  cls="text-green-700" />
               <Row label="Ventas con tarjeta"  value={mxn(summary.tarjeta)}   cls="text-blue-700" />
               <Row label="Plataformas"         value={mxn(summary.plataforma)} cls="text-purple-700" />
-              <div className="border-t pt-2">
-                <Row label={`Total ventas (${summary.count} órdenes)`} value={mxn(summary.total)} bold />
-              </div>
-              <div className="border-t pt-2">
-                <Row label="Efectivo esperado en caja" value={mxn(expectedCash)} bold />
-              </div>
+              <div className="border-t pt-2"><Row label={`Total ventas (${summary.count} órdenes)`} value={mxn(summary.total)} bold /></div>
+              <div className="border-t pt-2"><Row label="Efectivo esperado en caja" value={mxn(expectedCash)} bold /></div>
             </div>
-
             <div>
               <label className="block text-sm text-gray-600 mb-1.5">Efectivo contado en caja</label>
-              <input
-                type="number" min="0" step="0.01" value={closingAmt}
-                onChange={e => setClosingAmt(e.target.value)}
+              <input type="number" min="0" step="0.01" value={closingAmt} onChange={e => setClosingAmt(e.target.value)}
                 placeholder="$0.00" autoFocus
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-gray-400"
-              />
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-gray-400" />
             </div>
-
             {closingAmt !== '' && (
               <div className={`rounded-xl px-4 py-3 flex justify-between items-center ${
                 Math.abs(difference) < 1 ? 'bg-green-50 border border-green-200' :
                 difference < 0 ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'
               }`}>
                 <span className="text-sm font-medium text-gray-700">Diferencia</span>
-                <span className={`font-bold text-lg ${
-                  Math.abs(difference) < 1 ? 'text-green-700' :
-                  difference < 0 ? 'text-red-700' : 'text-amber-700'
-                }`}>
+                <span className={`font-bold text-lg ${Math.abs(difference) < 1 ? 'text-green-700' : difference < 0 ? 'text-red-700' : 'text-amber-700'}`}>
                   {difference >= 0 ? '+' : ''}{mxn(difference)}
                 </span>
               </div>
             )}
-
-            <input
-              value={notes} onChange={e => setNotes(e.target.value)}
-              placeholder="Notas del turno (opcional)"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-            />
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notas del turno (opcional)"
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400" />
             {error && <p className="text-red-500 text-sm">{error}</p>}
-
             <button onClick={handleClose} disabled={saving}
               className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-bold rounded-xl py-3.5 transition-colors">
               {saving ? 'Cerrando turno...' : 'Cerrar turno'}
@@ -617,9 +780,7 @@ function PaymentModal({ total, onClose, onComplete }) {
               <div className="flex gap-2 mt-2">
                 {[50,100,200,500].map(v => (
                   <button key={v} onClick={() => setCash(String(v))}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-1.5 text-sm font-medium transition-colors">
-                    ${v}
-                  </button>
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-1.5 text-sm font-medium transition-colors">${v}</button>
                 ))}
               </div>
               {cashNum >= total && (
@@ -671,13 +832,16 @@ function SuccessModal({ sale, onClose }) {
           <h2 className="text-xl font-bold text-gray-800 mb-1">¡Venta registrada!</h2>
           <p className="text-3xl font-black text-gray-900 mb-3">{mxn(sale.total)}</p>
           <p className="text-sm text-gray-500 mb-1">Pago: {methodLabel[sale.payment_method]}</p>
-          {sale.change > 0 && (
-            <p className="text-sm font-semibold text-green-700 mb-4">Cambio: {mxn(sale.change)}</p>
-          )}
+          {sale.change > 0 && <p className="text-sm font-semibold text-green-700 mb-4">Cambio: {mxn(sale.change)}</p>}
           <div className="text-left bg-gray-50 rounded-xl p-3 mb-4 text-xs space-y-1">
             {sale.items?.map(i => (
-              <div key={i.id} className="flex justify-between text-gray-600">
-                <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
+              <div key={i.cartKey} className="text-gray-600">
+                <div className="flex justify-between">
+                  <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
+                </div>
+                {i.selectedModifiers?.length > 0 && (
+                  <p className="text-gray-400 pl-2">+ {i.selectedModifiers.map(m => m.name).join(', ')}</p>
+                )}
               </div>
             ))}
           </div>
@@ -705,8 +869,15 @@ function SuccessModal({ sale, onClose }) {
         </div>
         <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '6px 0', margin: '6px 0' }}>
           {sale.items?.map((i, idx) => (
-            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px' }}>
-              <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
+            <div key={idx} style={{ marginBottom: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+                <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
+              </div>
+              {i.selectedModifiers?.length > 0 && (
+                <p style={{ fontSize: '9px', color: '#555', paddingLeft: '8px', margin: '1px 0' }}>
+                  + {i.selectedModifiers.map(m => m.name).join(', ')}
+                </p>
+              )}
             </div>
           ))}
         </div>
@@ -727,5 +898,18 @@ function SuccessModal({ sale, onClose }) {
         </div>
       </div>
     </>
+  )
+}
+
+// small icon used inline
+function Sliders({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
+      <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
+      <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
+      <line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/>
+      <line x1="17" y1="16" x2="23" y2="16"/>
+    </svg>
   )
 }
