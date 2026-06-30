@@ -9,6 +9,8 @@ import Cuentas           from './pages/pos/Cuentas'
 import CuentaDetalle     from './pages/pos/CuentaDetalle'
 import Dashboard         from './pages/admin/Dashboard'
 import Products          from './pages/admin/Products'
+import Categories        from './pages/admin/Categories'
+import Modifiers         from './pages/admin/Modifiers'
 import Recipes           from './pages/admin/Recipes'
 import Inventory         from './pages/admin/Inventory'
 import Statistics        from './pages/admin/Statistics'
@@ -74,15 +76,17 @@ function AppRoutes() {
       <Route path="/pos/requisicion"  element={<W><Requisition /></W>} />
 
       {/* Solo Admin */}
-      <Route path="/admin"                   element={<A><Dashboard /></A>} />
-      <Route path="/admin/ventas"            element={<A><SalesHistory /></A>} />
-      <Route path="/admin/productos"         element={<A><Products /></A>} />
-      <Route path="/admin/recetas"           element={<A><Recipes /></A>} />
-      <Route path="/admin/inventario"        element={<A><Inventory /></A>} />
-      <Route path="/admin/estadisticas"      element={<A><Statistics /></A>} />
-      <Route path="/admin/requisiciones"     element={<A><AdminRequisitions /></A>} />
-      <Route path="/admin/cortes"            element={<A><AdminCorteCaja /></A>} />
-      <Route path="/admin/cuentas"           element={<A><AdminCuentas /></A>} />
+      <Route path="/admin"                    element={<A><Dashboard /></A>} />
+      <Route path="/admin/ventas"             element={<A><SalesHistory /></A>} />
+      <Route path="/admin/estadisticas"       element={<A><Statistics /></A>} />
+      <Route path="/admin/cortes"             element={<A><AdminCorteCaja /></A>} />
+      <Route path="/admin/cuentas"            element={<A><AdminCuentas /></A>} />
+      <Route path="/admin/productos"          element={<A><Products /></A>} />
+      <Route path="/admin/categorias"         element={<A><Categories /></A>} />
+      <Route path="/admin/modificadores"      element={<A><Modifiers /></A>} />
+      <Route path="/admin/recetas"            element={<A><Recipes /></A>} />
+      <Route path="/admin/inventario"         element={<A><Inventory /></A>} />
+      <Route path="/admin/requisiciones"      element={<A><AdminRequisitions /></A>} />
 
       <Route path="/"  element={<Navigate to="/pos" replace />} />
       <Route path="*"  element={<Navigate to="/pos" replace />} />
