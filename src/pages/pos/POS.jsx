@@ -74,11 +74,17 @@ export default function POS() {
   }
 
   async function fetchProductsWithMods() {
+    // 1. IDs de grupos activos para esta sucursal
+    let q = supabase.from('modifier_groups').select('id').eq('active', true)
+    if (activeBranch?.id) q = q.eq('branch_id', activeBranch.id)
+    const { data: groupData } = await q
+    if (!groupData?.length) { setProductsWithMods(new Set()); return }
+    // 2. Productos asignados a esos grupos
     const { data } = await supabase
-      .from('modifier_groups')
+      .from('product_modifier_group_assignments')
       .select('product_id')
-      .eq('active', true)
-    setProductsWithMods(new Set((data ?? []).map(g => g.product_id)))
+      .in('group_id', groupData.map(g => g.id))
+    setProductsWithMods(new Set((data ?? []).map(r => r.product_id)))
   }
 
   async function fetchRecentSales() {
@@ -170,7 +176,7 @@ export default function POS() {
       })
     )
 
-    setLastSale({ ...sale, items: cart, change: changeGiven, cashier: profile?.name ?? 'Cajero', branchName: activeBranch?.name })
+    setLastSale({ ...sale, items: cart, change: changeGiven, cashier: profile?.name ?? 'Cajero', branchName: activeBranch?.name, branchLogoUrl: activeBranch?.logo_url ?? '/logo.svg' })
     clearCart()
     setShowPayment(false)
     fetchRecentSales()
@@ -395,6 +401,8 @@ export default function POS() {
       {showCorte    && (
         <CorteModal
           cashRegister={cashRegister}
+          cashierName={profile?.name ?? 'Cajero'}
+          activeBranch={activeBranch}
           onClose={() => setShowCorte(false)}
           onClosed={() => { setCashRegister(null); setCheckingRegister(false); setShowCorte(false) }}
         />
@@ -412,11 +420,28 @@ function ModifierModal({ product, onClose, onConfirm }) {
 
   useEffect(() => {
     async function load() {
-      const [{ data: gData }, { data: cData }] = await Promise.all([
-        supabase.from('modifier_groups').select('*, modifiers(*)').eq('product_id', product.id).eq('active', true).order('sort_order'),
+      // Cargar asignaciones de grupos para este producto + combo items en paralelo
+      const [{ data: assignments }, { data: cData }] = await Promise.all([
+        supabase
+          .from('product_modifier_group_assignments')
+          .select('group_id, sort_order')
+          .eq('product_id', product.id)
+          .order('sort_order'),
         supabase.from('combo_items').select('*, products(name)').eq('combo_product_id', product.id),
       ])
-      setGroups(gData ?? [])
+      // Obtener los grupos con sus modificadores
+      const groupIds = (assignments ?? []).map(a => a.group_id)
+      let gData = []
+      if (groupIds.length > 0) {
+        const sortMap = Object.fromEntries((assignments ?? []).map(a => [a.group_id, a.sort_order]))
+        const { data: rawGroups } = await supabase
+          .from('modifier_groups')
+          .select('*, modifiers(*)')
+          .in('id', groupIds)
+          .eq('active', true)
+        gData = (rawGroups ?? []).sort((a, b) => (sortMap[a.id] ?? 0) - (sortMap[b.id] ?? 0))
+      }
+      setGroups(gData)
       setComboItems(cData ?? [])
       setLoading(false)
     }
@@ -625,7 +650,7 @@ function AperturaOverlay({ userId, cashierName, branchId, branchName, onOpen }) 
 }
 
 // ─── Corte de Caja ────────────────────────────────────────────
-function CorteModal({ cashRegister, onClose, onClosed }) {
+function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed }) {
   const [summary,    setSummary]    = useState(null)
   const [closingAmt, setClosingAmt] = useState('')
   const [notes,      setNotes]      = useState('')
@@ -707,13 +732,82 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
             <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notas del turno (opcional)"
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400" />
             {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button onClick={handleClose} disabled={saving}
-              className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-bold rounded-xl py-3.5 transition-colors">
-              {saving ? 'Cerrando turno...' : 'Cerrar turno'}
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => window.print()}
+                className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-3 text-sm font-medium transition-colors">
+                <Printer className="w-4 h-4" /> Imprimir corte
+              </button>
+              <button onClick={handleClose} disabled={saving}
+                className="flex-1 bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-bold rounded-xl py-3 transition-colors">
+                {saving ? 'Cerrando...' : 'Cerrar turno'}
+              </button>
+            </div>
           </div>
         )}
       </div>
+
+      {/* Impresión del corte */}
+      {summary && (
+        <div className="print-only ticket">
+          <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+            <img src={activeBranch?.logo_url ?? '/logo.svg'} alt="Logo"
+              style={{ width: '60px', height: 'auto', display: 'block', margin: '0 auto 4px', filter: 'grayscale(1) contrast(1.5)' }} />
+            <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '0' }}>{activeBranch?.name ?? 'Sucursal'}</p>
+            <p style={{ fontSize: '11px', fontWeight: 'bold', margin: '4px 0 2px' }}>CORTE DE TURNO</p>
+            <p style={{ fontSize: '9px', color: '#555', margin: '1px 0' }}>
+              {new Date(cashRegister.opening_at ?? Date.now()).toLocaleDateString('es-MX')}
+            </p>
+            <p style={{ fontSize: '9px', color: '#555', margin: '1px 0' }}>Cajero: {cashierName}</p>
+          </div>
+
+          <div style={{ borderTop: '1px dashed #000', padding: '6px 0', margin: '4px 0' }}>
+            <p style={{ fontSize: '9px', color: '#555', fontWeight: 'bold', margin: '0 0 4px', textTransform: 'uppercase' }}>Resumen del turno</p>
+            <RowPrint label="Apertura de caja"    value={mxn(cashRegister.opening_amount)} />
+            <RowPrint label="Ventas en efectivo"  value={mxn(summary.efectivo)} />
+            <RowPrint label="Ventas con tarjeta"  value={mxn(summary.tarjeta)} />
+            <RowPrint label="Plataformas"         value={mxn(summary.plataforma)} />
+            <RowPrint label={`Total (${summary.count} órdenes)`} value={mxn(summary.total)} bold />
+          </div>
+
+          <div style={{ borderTop: '1px dashed #000', padding: '6px 0', margin: '4px 0' }}>
+            <RowPrint label="Efectivo esperado"   value={mxn(Number(cashRegister.opening_amount) + summary.efectivo)} bold />
+            <RowPrint label="Efectivo contado"    value={mxn(parseFloat(closingAmt) || 0)} bold />
+            {closingAmt !== '' && (
+              <RowPrint
+                label="Diferencia"
+                value={`${(parseFloat(closingAmt) - (Number(cashRegister.opening_amount) + summary.efectivo)) >= 0 ? '+' : ''}${mxn(parseFloat(closingAmt) - (Number(cashRegister.opening_amount) + summary.efectivo))}`}
+                bold
+              />
+            )}
+          </div>
+
+          {notes && (
+            <div style={{ borderTop: '1px dashed #000', padding: '6px 0 4px', margin: '4px 0', fontSize: '9px' }}>
+              <p style={{ margin: '0 0 2px', fontWeight: 'bold' }}>Notas:</p>
+              <p style={{ margin: 0, color: '#555' }}>{notes}</p>
+            </div>
+          )}
+
+          <div style={{ borderTop: '1px solid #000', marginTop: '12px', paddingTop: '12px' }}>
+            <p style={{ fontSize: '9px', color: '#555', margin: '0 0 24px' }}>Recibido por:</p>
+            <div style={{ borderBottom: '1px solid #000', width: '100%', marginBottom: '6px' }} />
+            <p style={{ fontSize: '9px', color: '#555', margin: '0 0 16px', textAlign: 'center' }}>Firma y nombre</p>
+            <p style={{ fontSize: '9px', color: '#555', margin: '0 0 4px' }}>Fecha: ___________________</p>
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '8px', color: '#999' }}>
+            <p>Grupo Lopval</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RowPrint({ label, value, bold }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px', fontWeight: bold ? 'bold' : 'normal' }}>
+      <span>{label}</span><span>{value}</span>
     </div>
   )
 }
@@ -860,7 +954,9 @@ function SuccessModal({ sale, onClose }) {
 
       <div className="print-only ticket">
         <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-          <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '0' }}>{sale.branchName ?? 'Pizza & Totó'}</p>
+          <img src={sale.branchLogoUrl ?? '/logo.svg'} alt="Logo"
+            style={{ width: '56px', height: 'auto', display: 'block', margin: '0 auto 4px', filter: 'grayscale(1) contrast(1.5)' }} />
+          <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '0' }}>{sale.branchName ?? 'Pizza & Totó'}</p>
           <p style={{ fontSize: '10px', margin: '2px 0' }}>Grupo Lopval</p>
           <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>
             {now.toLocaleDateString('es-MX')} {now.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})}
