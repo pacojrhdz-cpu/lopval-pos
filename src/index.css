@@ -12,7 +12,7 @@
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
-/* ── Estilos de impresión para ticket térmico ── */
+/* â”€â”€ Estilos de impresiÃ³n para ticket tÃ©rmico â”€â”€ */
 .print-only { display: none; }
 
 @media print {
@@ -36,6 +36,19 @@
     box-sizing: border-box;
   }
 
+  /* Forzar negro puro en TODOS los elementos del ticket */
+  .print-only * {
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Logo: mÃ¡ximo contraste para impresora tÃ©rmica */
+  .print-only img {
+    filter: grayscale(1) contrast(2) brightness(0.3) !important;
+    max-width: 60mm !important;
+  }
+
   .ticket {
     width: 80mm;
     max-width: 80mm;
@@ -47,4 +60,5 @@
     size: 80mm auto;
     margin: 0;
   }
+}
 }
