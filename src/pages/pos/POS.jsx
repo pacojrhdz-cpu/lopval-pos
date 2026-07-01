@@ -427,7 +427,7 @@ function ModifierModal({ product, onClose, onConfirm }) {
           .select('group_id, sort_order')
           .eq('product_id', product.id)
           .order('sort_order'),
-        supabase.from('combo_items').select('*, products(name)').eq('combo_product_id', product.id),
+        supabase.from('combo_items').select('*, product:products!combo_items_product_id_fkey(name)').eq('combo_product_id', product.id),
       ])
       // Obtener los grupos con sus modificadores
       const groupIds = (assignments ?? []).map(a => a.group_id)
@@ -513,7 +513,7 @@ function ModifierModal({ product, onClose, onConfirm }) {
                   <div className="bg-gray-50 rounded-xl p-3 space-y-1">
                     {comboItems.map(ci => (
                       <div key={ci.id} className="flex justify-between text-sm text-gray-700">
-                        <span>{ci.products?.name}</span>
+                        <span>{ci.product?.name}</span>
                         <span className="text-gray-400">× {ci.quantity}</span>
                       </div>
                     ))}
