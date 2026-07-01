@@ -455,15 +455,18 @@ function CombosTab({ activeBranch }) {
 
   useEffect(() => {
     if (!selCombo) { setItems([]); return }
-    fetchItems()
+    fetchItems(selCombo)
   }, [selCombo])
 
-  async function fetchItems() {
+  async function fetchItems(comboId) {
+    const id = comboId ?? selCombo
+    if (!id) return
     setLoadingItems(true)
+    // Especificamos la FK exacta porque combo_items tiene dos referencias a products
     const { data } = await supabase
       .from('combo_items')
-      .select('*, products(name, price)')
-      .eq('combo_product_id', selCombo)
+      .select('*, product:products!combo_items_product_id_fkey(name, price)')
+      .eq('combo_product_id', id)
     setItems(data ?? [])
     setLoadingItems(false)
   }
@@ -540,7 +543,7 @@ function CombosTab({ activeBranch }) {
                   <div className="space-y-2">
                     {items.map(item => (
                       <div key={item.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2">
-                        <span className="flex-1 text-sm text-gray-800">{item.products?.name}</span>
+                        <span className="flex-1 text-sm text-gray-800">{item.product?.name}</span>
                         <span className="text-xs text-gray-500">× {item.quantity}</span>
                         <button onClick={() => removeItem(item.id)} className="text-gray-400 hover:text-red-600 transition-colors">
                           <Trash2 className="w-3.5 h-3.5" />
