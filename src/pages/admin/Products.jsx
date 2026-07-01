@@ -88,8 +88,13 @@ export default function Products() {
   }
 
   async function handleDelete(product) {
-    if (!confirm(`¿Eliminar "${product.name}"? Esta acción no se puede deshacer.`)) return
-    await supabase.from('products').delete().eq('id', product.id)
+    if (!confirm(`¿Eliminar "${product.name}"?\n\nSi el producto tiene ventas o recetas asociadas se ocultará del menú en lugar de eliminarse.`)) return
+    const { error } = await supabase.from('products').delete().eq('id', product.id)
+    if (error) {
+      // FK constraint: tiene historial — desactivar en su lugar
+      await supabase.from('products').update({ active: false }).eq('id', product.id)
+      alert(`"${product.name}" tiene historial de ventas y no puede eliminarse.\nSe ocultó del menú (activo = false).`)
+    }
     fetchAll()
   }
 
