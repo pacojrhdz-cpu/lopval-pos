@@ -665,11 +665,12 @@ function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed
     const { data } = await supabase.from('sales').select('total,payment_method').eq('cash_register_id', cashRegister.id).eq('status', 'completed')
     const s = (data ?? []).reduce((acc, sale) => {
       acc.total      += Number(sale.total); acc.count += 1
-      if (sale.payment_method === 'efectivo')   acc.efectivo   += Number(sale.total)
-      if (sale.payment_method === 'tarjeta')    acc.tarjeta    += Number(sale.total)
-      if (sale.payment_method === 'plataforma') acc.plataforma += Number(sale.total)
+      if (sale.payment_method === 'efectivo')      acc.efectivo      += Number(sale.total)
+      if (sale.payment_method === 'tarjeta')       acc.tarjeta       += Number(sale.total)
+      if (sale.payment_method === 'transferencia') acc.transferencia += Number(sale.total)
+      if (sale.payment_method === 'plataforma')    acc.plataforma    += Number(sale.total)
       return acc
-    }, { total: 0, count: 0, efectivo: 0, tarjeta: 0, plataforma: 0 })
+    }, { total: 0, count: 0, efectivo: 0, tarjeta: 0, transferencia: 0, plataforma: 0 })
     setSummary(s); setLoading(false)
   }
 
@@ -706,9 +707,10 @@ function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed
             <div className="bg-gray-50 rounded-xl p-4 space-y-2">
               <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-2">Resumen del turno</p>
               <Row label="Apertura de caja"    value={mxn(cashRegister.opening_amount)} />
-              <Row label="Ventas en efectivo"  value={mxn(summary.efectivo)}  cls="text-green-700" />
-              <Row label="Ventas con tarjeta"  value={mxn(summary.tarjeta)}   cls="text-blue-700" />
-              <Row label="Plataformas"         value={mxn(summary.plataforma)} cls="text-purple-700" />
+              <Row label="Ventas en efectivo"  value={mxn(summary.efectivo)}       cls="text-green-700" />
+              <Row label="Ventas con tarjeta"  value={mxn(summary.tarjeta)}        cls="text-blue-700" />
+              <Row label="Transferencias"      value={mxn(summary.transferencia ?? 0)} cls="text-orange-700" />
+              <Row label="Plataformas"         value={mxn(summary.plataforma)}     cls="text-purple-700" />
               <div className="border-t pt-2"><Row label={`Total ventas (${summary.count} órdenes)`} value={mxn(summary.total)} bold /></div>
               <div className="border-t pt-2"><Row label="Efectivo esperado en caja" value={mxn(expectedCash)} bold /></div>
             </div>
@@ -751,21 +753,22 @@ function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed
         <div className="print-only ticket">
           <div style={{ textAlign: 'center', marginBottom: '8px' }}>
             <img src={activeBranch?.logo_url ?? '/logo.svg'} alt="Logo"
-              style={{ width: '60px', height: 'auto', display: 'block', margin: '0 auto 4px', filter: 'grayscale(1) contrast(1.5)' }} />
-            <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '0' }}>{activeBranch?.name ?? 'Sucursal'}</p>
-            <p style={{ fontSize: '11px', fontWeight: 'bold', margin: '4px 0 2px' }}>CORTE DE TURNO</p>
-            <p style={{ fontSize: '9px', color: '#000', margin: '1px 0' }}>
+              style={{ width: '60px', height: 'auto', display: 'block', margin: '0 auto 4px', filter: 'grayscale(1) contrast(2) brightness(0.3)' }} />
+            <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#000', margin: '0' }}>{activeBranch?.name ?? 'Sucursal'}</p>
+            <p style={{ fontSize: '13px', fontWeight: 'bold', color: '#000', margin: '4px 0 2px' }}>CORTE DE TURNO</p>
+            <p style={{ fontSize: '12px', color: '#000', margin: '1px 0' }}>
               {new Date(cashRegister.opening_at ?? Date.now()).toLocaleDateString('es-MX')}
             </p>
-            <p style={{ fontSize: '9px', color: '#000', margin: '1px 0' }}>Cajero: {cashierName}</p>
+            <p style={{ fontSize: '12px', color: '#000', margin: '1px 0' }}>Cajero: {cashierName}</p>
           </div>
 
           <div style={{ borderTop: '1px dashed #000', padding: '6px 0', margin: '4px 0' }}>
-            <p style={{ fontSize: '9px', color: '#000', fontWeight: 'bold', margin: '0 0 4px', textTransform: 'uppercase' }}>Resumen del turno</p>
-            <RowPrint label="Apertura de caja"    value={mxn(cashRegister.opening_amount)} />
-            <RowPrint label="Ventas en efectivo"  value={mxn(summary.efectivo)} />
-            <RowPrint label="Ventas con tarjeta"  value={mxn(summary.tarjeta)} />
-            <RowPrint label="Plataformas"         value={mxn(summary.plataforma)} />
+            <p style={{ fontSize: '12px', color: '#000', fontWeight: 'bold', margin: '0 0 4px', textTransform: 'uppercase' }}>Resumen del turno</p>
+            <RowPrint label="Apertura de caja"      value={mxn(cashRegister.opening_amount)} />
+            <RowPrint label="Ventas en efectivo"    value={mxn(summary.efectivo)} />
+            <RowPrint label="Ventas con tarjeta"    value={mxn(summary.tarjeta)} />
+            <RowPrint label="Transferencias"        value={mxn(summary.transferencia ?? 0)} />
+            <RowPrint label="Plataformas"           value={mxn(summary.plataforma)} />
             <RowPrint label={`Total (${summary.count} órdenes)`} value={mxn(summary.total)} bold />
           </div>
 
@@ -782,20 +785,20 @@ function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed
           </div>
 
           {notes && (
-            <div style={{ borderTop: '1px dashed #000', padding: '6px 0 4px', margin: '4px 0', fontSize: '9px' }}>
-              <p style={{ margin: '0 0 2px', fontWeight: 'bold' }}>Notas:</p>
+            <div style={{ borderTop: '1px dashed #000', padding: '6px 0 4px', margin: '4px 0', fontSize: '12px' }}>
+              <p style={{ margin: '0 0 2px', fontWeight: 'bold', color: '#000' }}>Notas:</p>
               <p style={{ margin: 0, color: '#000' }}>{notes}</p>
             </div>
           )}
 
           <div style={{ borderTop: '1px solid #000', marginTop: '12px', paddingTop: '12px' }}>
-            <p style={{ fontSize: '9px', color: '#000', margin: '0 0 24px' }}>Recibido por:</p>
+            <p style={{ fontSize: '12px', color: '#000', margin: '0 0 24px' }}>Recibido por:</p>
             <div style={{ borderBottom: '1px solid #000', width: '100%', marginBottom: '6px' }} />
-            <p style={{ fontSize: '9px', color: '#000', margin: '0 0 16px', textAlign: 'center' }}>Firma y nombre</p>
-            <p style={{ fontSize: '9px', color: '#000', margin: '0 0 4px' }}>Fecha: ___________________</p>
+            <p style={{ fontSize: '12px', color: '#000', margin: '0 0 16px', textAlign: 'center' }}>Firma y nombre</p>
+            <p style={{ fontSize: '12px', color: '#000', margin: '0 0 4px' }}>Fecha: ___________________</p>
           </div>
 
-          <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '8px', color: '#999' }}>
+          <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '11px', color: '#000', fontWeight: 'bold' }}>
             <p>Grupo Lopval</p>
           </div>
         </div>
@@ -806,7 +809,7 @@ function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed
 
 function RowPrint({ label, value, bold }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px', fontWeight: bold ? 'bold' : 'normal' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '2px', color: '#000', fontWeight: bold ? 'bold' : '600' }}>
       <span>{label}</span><span>{value}</span>
     </div>
   )
