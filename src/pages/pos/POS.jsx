@@ -956,22 +956,22 @@ function SuccessModal({ sale, onClose }) {
       <div className="print-only ticket">
         <div style={{ textAlign: 'center', marginBottom: '8px' }}>
           <img src={sale.branchLogoUrl ?? '/logo.svg'} alt="Logo"
-            style={{ width: '56px', height: 'auto', display: 'block', margin: '0 auto 4px', filter: 'grayscale(1) contrast(1.5)' }} />
-          <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '0' }}>{sale.branchName ?? 'Pizza & Totó'}</p>
-          <p style={{ fontSize: '10px', margin: '2px 0' }}>Grupo Lopval</p>
-          <p style={{ fontSize: '9px', color: '#000', margin: '2px 0' }}>
+            style={{ width: '56px', height: 'auto', display: 'block', margin: '0 auto 4px', filter: 'grayscale(1) contrast(2) brightness(0.3)' }} />
+          <p style={{ fontSize: '15px', fontWeight: 'bold', margin: '0', color: '#000' }}>{sale.branchName ?? 'Pizza & Totó'}</p>
+          <p style={{ fontSize: '12px', fontWeight: '600', margin: '2px 0', color: '#000' }}>Grupo Lopval</p>
+          <p style={{ fontSize: '11px', margin: '2px 0', color: '#000' }}>
             {now.toLocaleDateString('es-MX')} {now.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})}
           </p>
-          {sale.cashier && <p style={{ fontSize: '9px', color: '#000', margin: '2px 0' }}>Cajero: {sale.cashier}</p>}
+          {sale.cashier && <p style={{ fontSize: '11px', margin: '2px 0', color: '#000' }}>Cajero: {sale.cashier}</p>}
         </div>
         <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '6px 0', margin: '6px 0' }}>
           {sale.items?.map((i, idx) => (
             <div key={idx} style={{ marginBottom: '4px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#000' }}>
                 <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
               </div>
               {i.selectedModifiers?.length > 0 && (
-                <p style={{ fontSize: '9px', color: '#000', paddingLeft: '8px', margin: '1px 0' }}>
+                <p style={{ fontSize: '11px', color: '#000', paddingLeft: '8px', margin: '1px 0' }}>
                   + {i.selectedModifiers.map(m => m.name).join(', ')}
                 </p>
               )}
@@ -979,18 +979,18 @@ function SuccessModal({ sale, onClose }) {
           ))}
         </div>
         {sale.discount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#000', marginBottom: '2px' }}>
             <span>Descuento</span><span>-{mxn(sale.discount)}</span>
           </div>
         )}
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold', borderTop: '1px solid #000', paddingTop: '4px', marginTop: '4px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: 'bold', color: '#000', borderTop: '1px solid #000', paddingTop: '4px', marginTop: '4px' }}>
           <span>TOTAL</span><span>{mxn(sale.total)}</span>
         </div>
-        <div style={{ marginTop: '6px', fontSize: '10px' }}>
+        <div style={{ marginTop: '6px', fontSize: '12px', color: '#000' }}>
           <p style={{ margin: '2px 0' }}>Pago: {methodLabel[sale.payment_method]}</p>
           {sale.change > 0 && <p style={{ margin: '2px 0' }}>Cambio: {mxn(sale.change)}</p>}
         </div>
-        <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '9px', color: '#000' }}>
+        <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '11px', color: '#000' }}>
           <p>¡Gracias por su visita!</p><p>Vuelva pronto</p>
         </div>
       </div>
