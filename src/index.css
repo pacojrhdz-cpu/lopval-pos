@@ -16,27 +16,27 @@
 .print-only { display: none; }
 
 @media print {
-  /* Ocultar todo con visibility para que los hijos puedan sobreescribir */
   * { visibility: hidden !important; }
 
-  /* Mostrar ticket y todos sus hijos */
   .print-only,
   .print-only * { visibility: visible !important; }
 
   .print-only {
     display: block !important;
-    position: fixed;
+    position: absolute;
     top: 0; left: 0;
-    width: 80mm;
+    width: 76mm;          /* 80mm - 2mm margen a cada lado */
+    margin: 0 auto;
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 13px;
+    font-size: 11px;
     color: #000 !important;
     background: #fff !important;
-    padding: 8px;
+    padding: 2mm 3mm;
     box-sizing: border-box;
+    overflow: hidden;
   }
 
-  /* Forzar negro puro y bold en TODOS los elementos del ticket */
+  /* Negro, bold, sin desborde en TODOS los hijos */
   .print-only *,
   .print-only p,
   .print-only span,
@@ -46,20 +46,22 @@
     font-weight: bold !important;
     font-family: Arial, Helvetica, sans-serif !important;
     text-decoration: none !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+    word-break: break-word !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Logo: máximo contraste para impresora térmica */
+  /* Logo */
   .print-only img {
     filter: grayscale(1) contrast(2) brightness(0.3) !important;
-    max-width: 60mm !important;
+    max-width: 50mm !important;
+    height: auto !important;
+    display: block !important;
   }
 
-  .ticket {
-    width: 80mm;
-    max-width: 80mm;
-  }
+  .ticket { width: 100%; }
 
   .no-print { display: none !important; }
 
