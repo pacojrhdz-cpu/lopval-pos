@@ -36,11 +36,12 @@
     box-sizing: border-box;
   }
 
-  /* Forzar negro puro en TODOS los elementos del ticket */
+  /* Forzar negro puro y bold en TODOS los elementos del ticket */
   .print-only * {
     color: #000 !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    font-weight: bold !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Logo: máximo contraste para impresora térmica */
