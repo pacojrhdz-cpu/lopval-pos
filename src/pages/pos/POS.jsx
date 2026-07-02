@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { mxn } from '../../utils/format'
 import {
   ShoppingCart, Search, Plus, Minus, Trash2, Tag,
-  CreditCard, Banknote, Smartphone, X, CheckCircle, Clock,
+  CreditCard, Banknote, Smartphone, ArrowLeftRight, X, CheckCircle, Clock,
   Printer, BookOpen, Scissors, Package
 } from 'lucide-react'
 
@@ -754,14 +754,14 @@ function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed
               style={{ width: '60px', height: 'auto', display: 'block', margin: '0 auto 4px', filter: 'grayscale(1) contrast(1.5)' }} />
             <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '0' }}>{activeBranch?.name ?? 'Sucursal'}</p>
             <p style={{ fontSize: '11px', fontWeight: 'bold', margin: '4px 0 2px' }}>CORTE DE TURNO</p>
-            <p style={{ fontSize: '9px', color: '#555', margin: '1px 0' }}>
+            <p style={{ fontSize: '9px', color: '#000', margin: '1px 0' }}>
               {new Date(cashRegister.opening_at ?? Date.now()).toLocaleDateString('es-MX')}
             </p>
-            <p style={{ fontSize: '9px', color: '#555', margin: '1px 0' }}>Cajero: {cashierName}</p>
+            <p style={{ fontSize: '9px', color: '#000', margin: '1px 0' }}>Cajero: {cashierName}</p>
           </div>
 
           <div style={{ borderTop: '1px dashed #000', padding: '6px 0', margin: '4px 0' }}>
-            <p style={{ fontSize: '9px', color: '#555', fontWeight: 'bold', margin: '0 0 4px', textTransform: 'uppercase' }}>Resumen del turno</p>
+            <p style={{ fontSize: '9px', color: '#000', fontWeight: 'bold', margin: '0 0 4px', textTransform: 'uppercase' }}>Resumen del turno</p>
             <RowPrint label="Apertura de caja"    value={mxn(cashRegister.opening_amount)} />
             <RowPrint label="Ventas en efectivo"  value={mxn(summary.efectivo)} />
             <RowPrint label="Ventas con tarjeta"  value={mxn(summary.tarjeta)} />
@@ -784,15 +784,15 @@ function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed
           {notes && (
             <div style={{ borderTop: '1px dashed #000', padding: '6px 0 4px', margin: '4px 0', fontSize: '9px' }}>
               <p style={{ margin: '0 0 2px', fontWeight: 'bold' }}>Notas:</p>
-              <p style={{ margin: 0, color: '#555' }}>{notes}</p>
+              <p style={{ margin: 0, color: '#000' }}>{notes}</p>
             </div>
           )}
 
           <div style={{ borderTop: '1px solid #000', marginTop: '12px', paddingTop: '12px' }}>
-            <p style={{ fontSize: '9px', color: '#555', margin: '0 0 24px' }}>Recibido por:</p>
+            <p style={{ fontSize: '9px', color: '#000', margin: '0 0 24px' }}>Recibido por:</p>
             <div style={{ borderBottom: '1px solid #000', width: '100%', marginBottom: '6px' }} />
-            <p style={{ fontSize: '9px', color: '#555', margin: '0 0 16px', textAlign: 'center' }}>Firma y nombre</p>
-            <p style={{ fontSize: '9px', color: '#555', margin: '0 0 4px' }}>Fecha: ___________________</p>
+            <p style={{ fontSize: '9px', color: '#000', margin: '0 0 16px', textAlign: 'center' }}>Firma y nombre</p>
+            <p style={{ fontSize: '9px', color: '#000', margin: '0 0 4px' }}>Fecha: ___________________</p>
           </div>
 
           <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '8px', color: '#999' }}>
@@ -850,11 +850,12 @@ function PaymentModal({ total, onClose, onComplete }) {
         </div>
         <div className="p-5 space-y-4">
           <p className="text-center text-3xl font-black text-gray-900">{mxn(total)}</p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {[
-              { id: 'efectivo',   icon: Banknote,   label: 'Efectivo'   },
-              { id: 'tarjeta',    icon: CreditCard, label: 'Tarjeta'    },
-              { id: 'plataforma', icon: Smartphone, label: 'Plataforma' },
+              { id: 'efectivo',      icon: Banknote,          label: 'Efectivo'      },
+              { id: 'tarjeta',       icon: CreditCard,        label: 'Tarjeta'       },
+              { id: 'transferencia', icon: ArrowLeftRight,    label: 'Transferencia' },
+              { id: 'plataforma',    icon: Smartphone,        label: 'Plataforma'    },
             ].map(({ id, icon: Icon, label }) => (
               <button key={id} onClick={() => setMethod(id)}
                 className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
@@ -908,7 +909,7 @@ function PaymentModal({ total, onClose, onComplete }) {
 
 // ─── Modal de Éxito + Ticket ──────────────────────────────────
 function SuccessModal({ sale, onClose }) {
-  const methodLabel = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', plataforma: sale.platform_name }
+  const methodLabel = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', plataforma: sale.platform_name }
   const now = new Date()
 
   useEffect(() => {
@@ -958,10 +959,10 @@ function SuccessModal({ sale, onClose }) {
             style={{ width: '56px', height: 'auto', display: 'block', margin: '0 auto 4px', filter: 'grayscale(1) contrast(1.5)' }} />
           <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '0' }}>{sale.branchName ?? 'Pizza & Totó'}</p>
           <p style={{ fontSize: '10px', margin: '2px 0' }}>Grupo Lopval</p>
-          <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>
+          <p style={{ fontSize: '9px', color: '#000', margin: '2px 0' }}>
             {now.toLocaleDateString('es-MX')} {now.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})}
           </p>
-          {sale.cashier && <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>Cajero: {sale.cashier}</p>}
+          {sale.cashier && <p style={{ fontSize: '9px', color: '#000', margin: '2px 0' }}>Cajero: {sale.cashier}</p>}
         </div>
         <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '6px 0', margin: '6px 0' }}>
           {sale.items?.map((i, idx) => (
@@ -970,7 +971,7 @@ function SuccessModal({ sale, onClose }) {
                 <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
               </div>
               {i.selectedModifiers?.length > 0 && (
-                <p style={{ fontSize: '9px', color: '#555', paddingLeft: '8px', margin: '1px 0' }}>
+                <p style={{ fontSize: '9px', color: '#000', paddingLeft: '8px', margin: '1px 0' }}>
                   + {i.selectedModifiers.map(m => m.name).join(', ')}
                 </p>
               )}
@@ -989,7 +990,7 @@ function SuccessModal({ sale, onClose }) {
           <p style={{ margin: '2px 0' }}>Pago: {methodLabel[sale.payment_method]}</p>
           {sale.change > 0 && <p style={{ margin: '2px 0' }}>Cambio: {mxn(sale.change)}</p>}
         </div>
-        <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '9px', color: '#555' }}>
+        <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '9px', color: '#000' }}>
           <p>¡Gracias por su visita!</p><p>Vuelva pronto</p>
         </div>
       </div>
