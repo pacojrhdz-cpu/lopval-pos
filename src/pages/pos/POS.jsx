@@ -811,7 +811,8 @@ function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed
 function RowPrint({ label, value, bold }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '2px', color: '#000', fontWeight: bold ? 'bold' : '600' }}>
-      <span>{label}</span><span>{value}</span>
+      <span style={{ flex: 1, minWidth: 0, marginRight: '6px' }}>{label}</span>
+      <span style={{ flexShrink: 0 }}>{value}</span>
     </div>
   )
 }
@@ -972,7 +973,8 @@ function SuccessModal({ sale, onClose }) {
           {sale.items?.map((i, idx) => (
             <div key={idx} style={{ marginBottom: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 'bold', color: '#000' }}>
-                <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '6px' }}>{i.name} x{i.qty}</span>
+                <span style={{ flexShrink: 0 }}>{mxn(i.price * i.qty)}</span>
               </div>
               {i.selectedModifiers?.length > 0 && (
                 <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#000', paddingLeft: '8px', margin: '1px 0' }}>
@@ -984,11 +986,11 @@ function SuccessModal({ sale, onClose }) {
         </div>
         {sale.discount > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 'bold', color: '#000', marginBottom: '2px' }}>
-            <span>Descuento</span><span>-{mxn(sale.discount)}</span>
+            <span style={{ flex: 1 }}>Descuento</span><span style={{ flexShrink: 0 }}>-{mxn(sale.discount)}</span>
           </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: 'bold', color: '#000', borderTop: '1px solid #000', paddingTop: '4px', marginTop: '4px' }}>
-          <span>TOTAL</span><span>{mxn(sale.total)}</span>
+          <span style={{ flex: 1 }}>TOTAL</span><span style={{ flexShrink: 0 }}>{mxn(sale.total)}</span>
         </div>
         <div style={{ marginTop: '6px', fontSize: '12px', fontWeight: 'bold', color: '#000' }}>
           <p style={{ margin: '2px 0' }}>Pago: {methodLabel[sale.payment_method]}</p>
