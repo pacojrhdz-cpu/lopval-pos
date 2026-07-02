@@ -28,8 +28,8 @@
     position: fixed;
     top: 0; left: 0;
     width: 80mm;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 11px;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
     color: #000 !important;
     background: #fff !important;
     padding: 8px;
@@ -40,6 +40,7 @@
   .print-only * {
     color: #000 !important;
     font-weight: bold !important;
+    font-family: Arial, Helvetica, sans-serif !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
