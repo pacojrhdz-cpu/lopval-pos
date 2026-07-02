@@ -176,7 +176,8 @@ export default function POS() {
       })
     )
 
-    setLastSale({ ...sale, items: cart, change: changeGiven, cashier: profile?.name ?? 'Cajero', branchName: activeBranch?.name, branchLogoUrl: activeBranch?.logo_url ?? '/logo.svg' })
+    const cashierName = (profile?.name && !profile.name.includes('@')) ? profile.name : 'Cajero'
+    setLastSale({ ...sale, items: cart, change: changeGiven, cashier: cashierName, branchName: activeBranch?.name, branchLogoUrl: activeBranch?.logo_url ?? '/logo.svg' })
     clearCart()
     setShowPayment(false)
     fetchRecentSales()
