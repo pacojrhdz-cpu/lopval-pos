@@ -756,14 +756,14 @@ function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed
               style={{ width: '60px', height: 'auto', display: 'block', margin: '0 auto 4px', filter: 'grayscale(1) contrast(2) brightness(0.3)' }} />
             <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#000', margin: '0' }}>{activeBranch?.name ?? 'Sucursal'}</p>
             <p style={{ fontSize: '13px', fontWeight: 'bold', color: '#000', margin: '4px 0 2px' }}>CORTE DE TURNO</p>
-            <p style={{ fontSize: '12px', color: '#000', margin: '1px 0' }}>
+            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000', margin: '1px 0' }}>
               {new Date(cashRegister.opening_at ?? Date.now()).toLocaleDateString('es-MX')}
             </p>
-            <p style={{ fontSize: '12px', color: '#000', margin: '1px 0' }}>Cajero: {cashierName}</p>
+            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000', margin: '1px 0' }}>Cajero: {cashierName}</p>
           </div>
 
           <div style={{ borderTop: '1px dashed #000', padding: '6px 0', margin: '4px 0' }}>
-            <p style={{ fontSize: '12px', color: '#000', fontWeight: 'bold', margin: '0 0 4px', textTransform: 'uppercase' }}>Resumen del turno</p>
+            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000', margin: '0 0 4px', textTransform: 'uppercase' }}>Resumen del turno</p>
             <RowPrint label="Apertura de caja"      value={mxn(cashRegister.opening_amount)} />
             <RowPrint label="Ventas en efectivo"    value={mxn(summary.efectivo)} />
             <RowPrint label="Ventas con tarjeta"    value={mxn(summary.tarjeta)} />
@@ -787,15 +787,15 @@ function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed
           {notes && (
             <div style={{ borderTop: '1px dashed #000', padding: '6px 0 4px', margin: '4px 0', fontSize: '12px' }}>
               <p style={{ margin: '0 0 2px', fontWeight: 'bold', color: '#000' }}>Notas:</p>
-              <p style={{ margin: 0, color: '#000' }}>{notes}</p>
+              <p style={{ margin: 0, fontWeight: 'bold', color: '#000' }}>{notes}</p>
             </div>
           )}
 
           <div style={{ borderTop: '1px solid #000', marginTop: '12px', paddingTop: '12px' }}>
-            <p style={{ fontSize: '12px', color: '#000', margin: '0 0 24px' }}>Recibido por:</p>
+            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000', margin: '0 0 24px' }}>Recibido por:</p>
             <div style={{ borderBottom: '1px solid #000', width: '100%', marginBottom: '6px' }} />
-            <p style={{ fontSize: '12px', color: '#000', margin: '0 0 16px', textAlign: 'center' }}>Firma y nombre</p>
-            <p style={{ fontSize: '12px', color: '#000', margin: '0 0 4px' }}>Fecha: ___________________</p>
+            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000', margin: '0 0 16px', textAlign: 'center' }}>Firma y nombre</p>
+            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000', margin: '0 0 4px' }}>Fecha: ___________________</p>
           </div>
 
           <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '11px', color: '#000', fontWeight: 'bold' }}>
@@ -961,20 +961,20 @@ function SuccessModal({ sale, onClose }) {
           <img src={sale.branchLogoUrl ?? '/logo.svg'} alt="Logo"
             style={{ width: '56px', height: 'auto', display: 'block', margin: '0 auto 4px', filter: 'grayscale(1) contrast(2) brightness(0.3)' }} />
           <p style={{ fontSize: '15px', fontWeight: 'bold', margin: '0', color: '#000' }}>{sale.branchName ?? 'Pizza & Totó'}</p>
-          <p style={{ fontSize: '12px', fontWeight: '600', margin: '2px 0', color: '#000' }}>Grupo Lopval</p>
-          <p style={{ fontSize: '11px', margin: '2px 0', color: '#000' }}>
+          <p style={{ fontSize: '12px', fontWeight: 'bold', margin: '2px 0', color: '#000' }}>Grupo Lopval</p>
+          <p style={{ fontSize: '11px', fontWeight: 'bold', margin: '2px 0', color: '#000' }}>
             {now.toLocaleDateString('es-MX')} {now.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})}
           </p>
-          {sale.cashier && <p style={{ fontSize: '11px', margin: '2px 0', color: '#000' }}>Cajero: {sale.cashier}</p>}
+          {sale.cashier && <p style={{ fontSize: '11px', fontWeight: 'bold', margin: '2px 0', color: '#000' }}>Cajero: {sale.cashier}</p>}
         </div>
         <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '6px 0', margin: '6px 0' }}>
           {sale.items?.map((i, idx) => (
             <div key={idx} style={{ marginBottom: '4px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#000' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 'bold', color: '#000' }}>
                 <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
               </div>
               {i.selectedModifiers?.length > 0 && (
-                <p style={{ fontSize: '11px', color: '#000', paddingLeft: '8px', margin: '1px 0' }}>
+                <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#000', paddingLeft: '8px', margin: '1px 0' }}>
                   + {i.selectedModifiers.map(m => m.name).join(', ')}
                 </p>
               )}
@@ -982,18 +982,18 @@ function SuccessModal({ sale, onClose }) {
           ))}
         </div>
         {sale.discount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#000', marginBottom: '2px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 'bold', color: '#000', marginBottom: '2px' }}>
             <span>Descuento</span><span>-{mxn(sale.discount)}</span>
           </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: 'bold', color: '#000', borderTop: '1px solid #000', paddingTop: '4px', marginTop: '4px' }}>
           <span>TOTAL</span><span>{mxn(sale.total)}</span>
         </div>
-        <div style={{ marginTop: '6px', fontSize: '12px', color: '#000' }}>
+        <div style={{ marginTop: '6px', fontSize: '12px', fontWeight: 'bold', color: '#000' }}>
           <p style={{ margin: '2px 0' }}>Pago: {methodLabel[sale.payment_method]}</p>
           {sale.change > 0 && <p style={{ margin: '2px 0' }}>Cambio: {mxn(sale.change)}</p>}
         </div>
-        <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '11px', color: '#000' }}>
+        <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '11px', fontWeight: 'bold', color: '#000' }}>
           <p>¡Gracias por su visita!</p><p>Vuelva pronto</p>
         </div>
       </div>
