@@ -19,7 +19,7 @@ const CAT_COLORS = {
 }
 
 // ─── Impresión por iframe — texto plano con <pre> para máxima compatibilidad ──
-const TW = 32 // caracteres por línea (80mm con 7mm de margen lateral ≈ 32 chars)
+const TW = 28 // caracteres por línea (80mm con 7mm de margen lateral ≈ 28 chars)
 
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -59,31 +59,13 @@ const BRANCH_INFO = {
   },
 }
 
-// Convierte URL a base64. Si es SVG, la convierte a PNG via canvas
-// (muchos drivers de impresora térmica no renderizan SVG directamente)
+// Convierte URL a data URL para embeber en el iframe
+// SVG se incrusta directo (fondo transparente, sin conversión a PNG)
 async function toBase64(url) {
   try {
     const abs = url.startsWith('http') ? url : window.location.origin + url
     const res  = await fetch(abs)
     const blob = await res.blob()
-    if (blob.type.includes('svg') || abs.includes('.svg')) {
-      return await new Promise(resolve => {
-        const objUrl = URL.createObjectURL(blob)
-        const img = new window.Image()
-        img.onload = () => {
-          const c = document.createElement('canvas')
-          c.width = 200; c.height = 200
-          const ctx = c.getContext('2d')
-          ctx.fillStyle = '#ffffff'
-          ctx.fillRect(0, 0, 200, 200)
-          ctx.drawImage(img, 0, 0, 200, 200)
-          URL.revokeObjectURL(objUrl)
-          resolve(c.toDataURL('image/png'))
-        }
-        img.onerror = () => { URL.revokeObjectURL(objUrl); resolve(null) }
-        img.src = objUrl
-      })
-    }
     return await new Promise(resolve => {
       const r = new FileReader()
       r.onloadend = () => resolve(r.result)
@@ -112,10 +94,10 @@ function printHtml(body) {
   }, 700)
 }
 
-// Fila de tabla: [qty:3][nombre:15][p.u.:7][monto:7] = 32 chars
+// Fila de tabla: [qty:2][nombre:12][p.u.:7][monto:7] = 28 chars
 function tItemRow(qty, name, pu, monto) {
-  const q = String(qty).padStart(3)
-  const n = String(name).slice(0, 15).padEnd(15)
+  const q = String(qty).slice(0, 2).padStart(2)
+  const n = String(name).slice(0, 12).padEnd(12)
   const p = String(pu).padStart(7)
   const a = String(monto).padStart(7)
   return `${q}${n}${p}${a}`
@@ -131,29 +113,16 @@ async function buildTicketHtml(sale) {
   const info = BRANCH_INFO[sale.branchId] ?? {}
   const iva  = ((Number(sale.total ?? 0) / 1.16) * 0.16).toFixed(2)
 
-  // Fetch logo y QR en paralelo
-  const logoUrl = sale.branchLogoUrl ?? '/logo.svg'
-  const qrApiUrl = info.qrUrl
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=110x110&color=000000&bgcolor=ffffff&data=${encodeURIComponent(info.qrUrl)}`
-    : null
-
-  const [logoB64, qrB64] = await Promise.all([
-    toBase64(logoUrl),
-    qrApiUrl ? toBase64(qrApiUrl) : Promise.resolve(null),
-  ])
-
+  const logoB64  = await toBase64(sale.branchLogoUrl ?? '/logo.svg')
   const logoHtml = logoB64
-    ? `<img src="${logoB64}" width="72" style="display:block;margin:0 auto 2px;filter:grayscale(1) contrast(2) brightness(.3)">`
-    : `<b style="font-size:15px">${esc(sale.branchName ?? 'Pizza & Totó')}</b>`
-
-  const qrHtml = qrB64
-    ? `<img src="${qrB64}" width="90" style="display:block;margin:4px auto">`
-    : ''
+    ? `<img src="${logoB64}" width="70" style="display:block;margin:0 auto 2px;filter:grayscale(1)">`
+    : `<b style="font-size:15px">${esc(sale.branchName ?? 'Sucursal')}</b>`
+  const qrHtml   = ''
 
   const lines = []
 
   // Encabezado tabla
-  lines.push(tItemRow('Cant', 'Artículos', 'P.U.', 'Monto'))
+  lines.push(tItemRow('Ct', 'Artículos', 'P.U.', 'Monto'))
   lines.push(SEP)
 
   for (const i of (sale.items ?? [])) {
