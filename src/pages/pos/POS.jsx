@@ -39,12 +39,49 @@ function tRow(left, right) {
   return left + ' '.repeat(spaces) + right
 }
 
-// Convierte cualquier URL de imagen a base64 para embeber en el iframe
+// Info por sucursal: razón social, RFC, dirección, QR, promo
+const BRANCH_INFO = {
+  'aaaaaaaa-0000-0000-0000-000000000001': {
+    legalName: 'GRUPO PIZZA TOTO',
+    rfc:       'GPT2402165BA',
+    address:   'Boulevard San Guillermo Lote 1420\nPrivada Santa Matilde\nZempoala Hidalgo 43845',
+    qrUrl:     'https://pizzaytoto.com',
+    promo:     'Escanea, regístrate y llévate papas gratis.\nSé parte de los Socios Totó.',
+  },
+  'aaaaaaaa-0000-0000-0000-000000000002': {
+    legalName: 'FOOD STATION FOVISTE',
+    rfc:       '',
+    address:   '',
+    qrUrl:     '',
+    promo:     '',
+  },
+}
+
+// Convierte URL a base64. Si es SVG, la convierte a PNG via canvas
+// (muchos drivers de impresora térmica no renderizan SVG directamente)
 async function toBase64(url) {
   try {
     const abs = url.startsWith('http') ? url : window.location.origin + url
     const res  = await fetch(abs)
     const blob = await res.blob()
+    if (blob.type.includes('svg') || abs.includes('.svg')) {
+      return await new Promise(resolve => {
+        const objUrl = URL.createObjectURL(blob)
+        const img = new window.Image()
+        img.onload = () => {
+          const c = document.createElement('canvas')
+          c.width = 200; c.height = 200
+          const ctx = c.getContext('2d')
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, 200, 200)
+          ctx.drawImage(img, 0, 0, 200, 200)
+          URL.revokeObjectURL(objUrl)
+          resolve(c.toDataURL('image/png'))
+        }
+        img.onerror = () => { URL.revokeObjectURL(objUrl); resolve(null) }
+        img.src = objUrl
+      })
+    }
     return await new Promise(resolve => {
       const r = new FileReader()
       r.onloadend = () => resolve(r.result)
@@ -70,7 +107,16 @@ function printHtml(body) {
   setTimeout(() => {
     try { frame.contentWindow.focus(); frame.contentWindow.print() } catch {}
     setTimeout(() => { try { document.body.removeChild(frame) } catch {} }, 1000)
-  }, 250)
+  }, 700)
+}
+
+// Fila de tabla: [qty:4][nombre:20][p.u.:8][monto:8] = 40 chars
+function tItemRow(qty, name, pu, monto) {
+  const q = String(qty).padStart(4)
+  const n = String(name).slice(0, 20).padEnd(20)
+  const p = String(pu).padStart(8)
+  const a = String(monto).padStart(8)
+  return `${q}${n}${p}${a}`
 }
 
 async function buildTicketHtml(sale) {
@@ -78,37 +124,76 @@ async function buildTicketHtml(sale) {
   const date = now.toLocaleDateString('es-MX')
   const time = now.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' })
   const METHODS = { efectivo:'Efectivo', tarjeta:'Tarjeta', transferencia:'Transferencia', plataforma: sale.platform_name ?? 'Plataforma' }
-  const SEP = '-'.repeat(TW)
-  const lines = []
+  const SEP  = '-'.repeat(TW)
+  const SEP2 = '='.repeat(TW)
+  const info = BRANCH_INFO[sale.branchId] ?? {}
+  const iva  = ((Number(sale.total ?? 0) / 1.16) * 0.16).toFixed(2)
 
-  lines.push(SEP)
-  for (const i of (sale.items ?? [])) {
-    lines.push(tRow(`${i.name} x${i.qty}`, mxn(i.price * i.qty)))
-    if (i.selectedModifiers?.length > 0)
-      lines.push(`  + ${i.selectedModifiers.map(m => m.name).join(', ')}`)
-  }
-  lines.push(SEP)
-  if (sale.discount > 0) lines.push(tRow('Descuento', `-${mxn(sale.discount)}`))
-  lines.push(tRow('TOTAL', mxn(sale.total)))
-  lines.push('')
-  lines.push(`Pago: ${METHODS[sale.payment_method] ?? sale.payment_method}`)
-  if (sale.change > 0) lines.push(`Cambio: ${mxn(sale.change)}`)
-  lines.push('')
-  lines.push(tCenter('¡Gracias por su visita!'))
-  lines.push(tCenter('Vuelva pronto'))
+  // Fetch logo y QR en paralelo
+  const logoUrl = sale.branchLogoUrl ?? '/logo.svg'
+  const qrApiUrl = info.qrUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=110x110&color=000000&bgcolor=ffffff&data=${encodeURIComponent(info.qrUrl)}`
+    : null
 
-  const logoB64 = await toBase64(sale.branchLogoUrl ?? '/logo.svg')
+  const [logoB64, qrB64] = await Promise.all([
+    toBase64(logoUrl),
+    qrApiUrl ? toBase64(qrApiUrl) : Promise.resolve(null),
+  ])
+
   const logoHtml = logoB64
-    ? `<img src="${logoB64}" width="56" style="display:block;margin:0 auto 3px;filter:grayscale(1) contrast(2) brightness(.3)"><br>`
+    ? `<img src="${logoB64}" width="72" style="display:block;margin:0 auto 2px;filter:grayscale(1) contrast(2) brightness(.3)">`
+    : `<b style="font-size:15px">${esc(sale.branchName ?? 'Pizza & Totó')}</b>`
+
+  const qrHtml = qrB64
+    ? `<img src="${qrB64}" width="90" style="display:block;margin:4px auto">`
     : ''
 
+  const lines = []
+
+  // Encabezado tabla
+  lines.push(tItemRow('Cant', 'Artículos', 'P.U.', 'Monto'))
+  lines.push(SEP)
+
+  for (const i of (sale.items ?? [])) {
+    lines.push(tItemRow(i.qty, i.name, mxn(i.price), mxn(i.price * i.qty)))
+    if (i.selectedModifiers?.length > 0)
+      lines.push(`      · ${i.selectedModifiers.map(m => m.name).join(', ')}`)
+  }
+
+  lines.push(SEP)
+  if (sale.discount > 0) {
+    lines.push(tRow('Descuento', `-${mxn(sale.discount)}`))
+    lines.push(SEP)
+  }
+  lines.push(tRow('Total', mxn(sale.total)))
+  lines.push('')
+  lines.push(`I.V.A. (Incluido): ${mxn(iva)}`)
+  lines.push('')
+  lines.push(`Le atendió: ${esc(sale.cashier ?? 'Cajero')}`)
+  lines.push(`Método: ${METHODS[sale.payment_method] ?? sale.payment_method}`)
+  if (sale.change > 0) lines.push(`Cambio: ${mxn(sale.change)}`)
+  lines.push(SEP2)
+  if (info.address) {
+    lines.push('')
+    for (const l of info.address.split('\n')) lines.push(tCenter(l))
+  }
+  // Líneas extra para que la cortadora avance y corte
+  lines.push('')
+  lines.push('')
+  lines.push('')
+  lines.push('')
+  lines.push('')
+
   return `
-    <div style="text-align:center;font-family:'Courier New',monospace;margin-bottom:4px">
+    <div style="text-align:center;font-family:'Courier New',monospace;font-size:11px">
+      <div style="font-size:9px;margin-bottom:2px">Vuelva pronto</div>
       ${logoHtml}
-      <b style="font-size:14px">${esc(sale.branchName ?? 'Pizza & Toto')}</b><br>
-      <span style="font-size:11px">Grupo Lopval</span><br>
-      <span style="font-size:10px">${date} ${time}</span>
-      ${sale.cashier ? `<br><span style="font-size:10px">Cajero: ${esc(sale.cashier)}</span>` : ''}
+      ${qrHtml}
+      ${info.legalName ? `<br><b style="font-size:13px">${esc(info.legalName)}</b>` : ''}
+      ${info.rfc       ? `<br>RFC: ${esc(info.rfc)}`                                : ''}
+      <br>Sucursal: ${esc(sale.branchName ?? 'Sucursal')}
+      ${info.promo     ? `<br><span style="font-size:9px">${esc(info.promo).replace(/\n/g,'<br>')}</span>` : ''}
+      <br>${date} &nbsp; ${time}
     </div>
     <pre>${esc(lines.join('\n'))}</pre>`
 }
@@ -326,7 +411,7 @@ export default function POS() {
     )
 
     const cashierName = (profile?.name && !profile.name.includes('@')) ? profile.name : 'Cajero'
-    setLastSale({ ...sale, items: cart, change: changeGiven, cashier: cashierName, branchName: activeBranch?.name, branchLogoUrl: activeBranch?.logo_url ?? '/logo.svg' })
+    setLastSale({ ...sale, items: cart, change: changeGiven, cashier: cashierName, branchId: activeBranch?.id, branchName: activeBranch?.name, branchLogoUrl: activeBranch?.logo_url ?? '/logo.svg' })
     clearCart()
     setShowPayment(false)
     fetchRecentSales()
