@@ -18,9 +18,25 @@ const CAT_COLORS = {
   'Extras':    'bg-yellow-100 text-yellow-700 ring-yellow-200',
 }
 
-// ─── Impresión por iframe — funciona en TODAS las impresoras térmicas ─────────
+// ─── Impresión por iframe — texto plano con <pre> para máxima compatibilidad ──
+const TW = 40 // caracteres por línea (80mm ≈ 40 chars en Courier 12px)
+
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+
+// Centra texto dentro de TW caracteres
+function tCenter(text) {
+  text = String(text)
+  const pad = Math.max(0, Math.floor((TW - text.length) / 2))
+  return ' '.repeat(pad) + text
+}
+
+// Alinea izquierda y derecha separados por espacios hasta TW
+function tRow(left, right) {
+  left = String(left); right = String(right)
+  const spaces = Math.max(1, TW - left.length - right.length)
+  return left + ' '.repeat(spaces) + right
 }
 
 function printHtml(body) {
@@ -31,11 +47,8 @@ function printHtml(body) {
   doc.open()
   doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:bold;color:#000;padding:3mm;width:72mm}
-    table{width:100%;border-collapse:collapse}
-    td{font-size:12px;font-weight:bold;color:#000;padding:1px 0;vertical-align:top}
-    b{font-weight:bold}
-    img{display:block;filter:grayscale(1) contrast(2) brightness(.3)}
+    body{font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:bold;color:#000;padding:3mm}
+    pre{font-family:inherit;font-size:inherit;font-weight:inherit;white-space:pre;line-height:1.4}
     @page{size:80mm auto;margin:0}
   </style></head><body>${body}</body></html>`)
   doc.close()
@@ -50,38 +63,32 @@ function buildTicketHtml(sale) {
   const date = now.toLocaleDateString('es-MX')
   const time = now.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' })
   const METHODS = { efectivo:'Efectivo', tarjeta:'Tarjeta', transferencia:'Transferencia', plataforma: sale.platform_name ?? 'Plataforma' }
+  const SEP = '-'.repeat(TW)
+  const lines = []
 
-  const rows = (sale.items ?? []).map(i => {
-    const mods = (i.selectedModifiers ?? []).map(m => esc(m.name)).join(', ')
-    return `<tr>
-      <td>${esc(i.name)} x${i.qty}</td>
-      <td align="right" nowrap width="1">${mxn(i.price * i.qty)}</td>
-    </tr>${mods ? `<tr><td colspan="2" style="padding-left:8px;font-size:11px">+ ${mods}</td></tr>` : ''}`
-  }).join('')
+  lines.push(tCenter(sale.branchName ?? 'Pizza & Toto'))
+  lines.push(tCenter('Grupo Lopval'))
+  lines.push(tCenter(`${date} ${time}`))
+  if (sale.cashier) lines.push(tCenter(`Cajero: ${sale.cashier}`))
+  lines.push(SEP)
 
-  return `
-    <table cellspacing="0" cellpadding="0"><tr><td align="center" style="padding-bottom:6px">
-      <img src="${esc(sale.branchLogoUrl ?? '/logo.svg')}" width="48"><br>
-      <b style="font-size:14px">${esc(sale.branchName ?? 'Pizza &amp; Totó')}</b><br>
-      Grupo Lopval<br>
-      <span style="font-size:11px">${date} ${time}</span>
-      ${sale.cashier ? `<br><span style="font-size:11px">Cajero: ${esc(sale.cashier)}</span>` : ''}
-    </td></tr></table>
-    <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
-    <table cellspacing="0" cellpadding="0"><tbody>${rows}</tbody></table>
-    <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
-    <table cellspacing="0" cellpadding="0"><tbody>
-      ${sale.discount > 0 ? `<tr><td>Descuento</td><td align="right" nowrap width="1">-${mxn(sale.discount)}</td></tr>` : ''}
-      <tr>
-        <td style="font-size:14px;border-top:1px solid #000;padding-top:3px"><b>TOTAL</b></td>
-        <td align="right" nowrap width="1" style="font-size:14px;border-top:1px solid #000;padding-top:3px"><b>${mxn(sale.total)}</b></td>
-      </tr>
-      <tr><td colspan="2" style="padding-top:3px">Pago: ${METHODS[sale.payment_method] ?? sale.payment_method}</td></tr>
-      ${sale.change > 0 ? `<tr><td colspan="2">Cambio: ${mxn(sale.change)}</td></tr>` : ''}
-    </tbody></table>
-    <table cellspacing="0" cellpadding="0"><tr><td align="center" style="padding-top:8px;border-top:1px dashed #000">
-      ¡Gracias por su visita!<br>Vuelva pronto
-    </td></tr></table>`
+  for (const i of (sale.items ?? [])) {
+    lines.push(tRow(`${i.name} x${i.qty}`, mxn(i.price * i.qty)))
+    if (i.selectedModifiers?.length > 0)
+      lines.push(`  + ${i.selectedModifiers.map(m => m.name).join(', ')}`)
+  }
+  lines.push(SEP)
+
+  if (sale.discount > 0) lines.push(tRow('Descuento', `-${mxn(sale.discount)}`))
+  lines.push(tRow('TOTAL', mxn(sale.total)))
+  lines.push('')
+  lines.push(`Pago: ${METHODS[sale.payment_method] ?? sale.payment_method}`)
+  if (sale.change > 0) lines.push(`Cambio: ${mxn(sale.change)}`)
+  lines.push('')
+  lines.push(tCenter('¡Gracias por su visita!'))
+  lines.push(tCenter('Vuelva pronto'))
+
+  return `<pre>${esc(lines.join('\n'))}</pre>`
 }
 
 function buildCorteHtml({ cashRegister, summary, cashierName, activeBranch, closingAmt, notes }) {
@@ -89,41 +96,43 @@ function buildCorteHtml({ cashRegister, summary, cashierName, activeBranch, clos
   const expected   = Number(cashRegister.opening_amount) + (summary?.efectivo ?? 0)
   const closingNum = parseFloat(closingAmt) || 0
   const diff       = closingNum - expected
-  const row = (label, val) => `<tr><td>${esc(label)}</td><td align="right" nowrap width="1">${esc(val)}</td></tr>`
-  return `
-    <table cellspacing="0" cellpadding="0"><tr><td align="center" style="padding-bottom:6px">
-      <img src="${esc(activeBranch?.logo_url ?? '/logo.svg')}" width="48"><br>
-      <b style="font-size:14px">${esc(activeBranch?.name ?? 'Sucursal')}</b><br>
-      <b style="font-size:13px">CORTE DE TURNO</b><br>
-      <span style="font-size:12px">${date}</span><br>
-      <span style="font-size:12px">Cajero: ${esc(cashierName)}</span>
-    </td></tr></table>
-    <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
-    <b style="font-size:11px">RESUMEN DEL TURNO</b>
-    <table cellspacing="0" cellpadding="1">
-      ${row('Apertura de caja', mxn(cashRegister.opening_amount))}
-      ${row('Ventas en efectivo', mxn(summary.efectivo))}
-      ${row('Ventas con tarjeta', mxn(summary.tarjeta))}
-      ${row('Transferencias', mxn(summary.transferencia ?? 0))}
-      ${row('Plataformas', mxn(summary.plataforma))}
-    </table>
-    <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
-    <table cellspacing="0" cellpadding="1">
-      ${row(`Total (${summary.count} órdenes)`, mxn(summary.total))}
-    </table>
-    <hr style="border:none;border-top:1px solid #000;margin:4px 0">
-    <table cellspacing="0" cellpadding="1">
-      ${row('Efectivo esperado', mxn(expected))}
-      ${closingAmt !== '' ? row('Efectivo contado', mxn(closingNum)) : ''}
-      ${closingAmt !== '' ? row('Diferencia', (diff >= 0 ? '+' : '') + mxn(diff)) : ''}
-    </table>
-    ${notes ? `<hr style="border:none;border-top:1px dashed #000;margin:4px 0"><b>Notas:</b><br>${esc(notes)}` : ''}
-    <hr style="border:none;border-top:1px solid #000;margin:12px 0 6px">
-    Recibido por:<br><br><br>
-    <hr style="border:none;border-top:1px solid #000;margin:0 0 4px">
-    <div align="center">Firma y nombre</div><br>
-    Fecha: ___________________<br><br>
-    <div align="center">Grupo Lopval</div>`
+  const SEP  = '-'.repeat(TW)
+  const SEP2 = '='.repeat(TW)
+  const lines = []
+
+  lines.push(tCenter(activeBranch?.name ?? 'Sucursal'))
+  lines.push(tCenter('CORTE DE TURNO'))
+  lines.push(tCenter(date))
+  lines.push(tCenter(`Cajero: ${cashierName}`))
+  lines.push(SEP)
+  lines.push(tCenter('RESUMEN DEL TURNO'))
+  lines.push(SEP)
+  lines.push(tRow('Apertura de caja', mxn(cashRegister.opening_amount)))
+  lines.push(tRow('Ventas en efectivo', mxn(summary.efectivo)))
+  lines.push(tRow('Ventas con tarjeta', mxn(summary.tarjeta)))
+  lines.push(tRow('Transferencias', mxn(summary.transferencia ?? 0)))
+  lines.push(tRow('Plataformas', mxn(summary.plataforma)))
+  lines.push(SEP)
+  lines.push(tRow(`Total (${summary.count} ordenes)`, mxn(summary.total)))
+  lines.push(SEP2)
+  lines.push(tRow('Efectivo esperado', mxn(expected)))
+  if (closingAmt !== '') {
+    lines.push(tRow('Efectivo contado', mxn(closingNum)))
+    lines.push(tRow('Diferencia', (diff >= 0 ? '+' : '') + mxn(diff)))
+  }
+  if (notes) { lines.push(SEP); lines.push(`Notas: ${notes}`) }
+  lines.push(SEP2)
+  lines.push('')
+  lines.push('Recibido por:')
+  lines.push('')
+  lines.push('_'.repeat(TW))
+  lines.push(tCenter('Firma y nombre'))
+  lines.push('')
+  lines.push(`Fecha: ${'_'.repeat(20)}`)
+  lines.push('')
+  lines.push(tCenter('Grupo Lopval'))
+
+  return `<pre>${esc(lines.join('\n'))}</pre>`
 }
 
 export default function POS() {
