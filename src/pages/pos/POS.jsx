@@ -39,19 +39,21 @@ function tRow(left, right) {
   return left + ' '.repeat(spaces) + right
 }
 
-// Info por sucursal: razón social, RFC, dirección, QR, promo
+// Info por sucursal: razón social, RFC, dirección, teléfono
 const BRANCH_INFO = {
   'aaaaaaaa-0000-0000-0000-000000000001': {
     legalName: 'GRUPO PIZZA TOTO',
     rfc:       'GPT2402165BA',
     address:   'Boulevard San Guillermo Lote 1420\nPrivada Santa Matilde\nZempoala Hidalgo 43845',
-    qrUrl:     'https://pizzaytoto.com',
-    promo:     'Escanea, regístrate y llévate papas gratis.\nSé parte de los Socios Totó.',
+    phone:     '',
+    qrUrl:     '',
+    promo:     '',
   },
   'aaaaaaaa-0000-0000-0000-000000000002': {
     legalName: 'FOOD STATION FOVISTE',
     rfc:       '',
-    address:   '',
+    address:   'La Cintal 30, Fovissste III\n29050 Tuxtla Gutiérrez, Chis.',
+    phone:     'Tel. 961 386 3750',
     qrUrl:     '',
     promo:     '',
   },
@@ -192,6 +194,7 @@ async function buildTicketHtml(sale) {
       ${info.legalName ? `<br><b style="font-size:13px">${esc(info.legalName)}</b>` : ''}
       ${info.rfc       ? `<br>RFC: ${esc(info.rfc)}`                                : ''}
       <br>Sucursal: ${esc(sale.branchName ?? 'Sucursal')}
+      ${info.phone     ? `<br>${esc(info.phone)}`                                   : ''}
       ${info.promo     ? `<br><span style="font-size:9px">${esc(info.promo).replace(/\n/g,'<br>')}</span>` : ''}
       <br>${date} &nbsp; ${time}
     </div>
