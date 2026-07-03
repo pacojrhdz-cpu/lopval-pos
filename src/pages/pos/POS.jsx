@@ -49,6 +49,7 @@ function printHtml(body) {
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:bold;color:#000;padding:3mm}
     pre{font-family:inherit;font-size:inherit;font-weight:inherit;white-space:pre;line-height:1.4}
+    img{display:block;margin:0 auto 4px;filter:grayscale(1) contrast(2) brightness(.3)}
     @page{size:80mm auto;margin:0}
   </style></head><body>${body}</body></html>`)
   doc.close()
@@ -88,7 +89,8 @@ function buildTicketHtml(sale) {
   lines.push(tCenter('¡Gracias por su visita!'))
   lines.push(tCenter('Vuelva pronto'))
 
-  return `<pre>${esc(lines.join('\n'))}</pre>`
+  const logoUrl = esc(sale.branchLogoUrl ?? '/logo.svg')
+  return `<img src="${logoUrl}" width="56"><pre>${esc(lines.join('\n'))}</pre>`
 }
 
 function buildCorteHtml({ cashRegister, summary, cashierName, activeBranch, closingAmt, notes }) {
@@ -132,7 +134,8 @@ function buildCorteHtml({ cashRegister, summary, cashierName, activeBranch, clos
   lines.push('')
   lines.push(tCenter('Grupo Lopval'))
 
-  return `<pre>${esc(lines.join('\n'))}</pre>`
+  const logoUrl = esc(activeBranch?.logo_url ?? '/logo.svg')
+  return `<img src="${logoUrl}" width="56"><pre>${esc(lines.join('\n'))}</pre>`
 }
 
 export default function POS() {
