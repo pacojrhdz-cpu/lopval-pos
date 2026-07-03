@@ -67,19 +67,14 @@ function buildTicketHtml(sale) {
   const SEP = '-'.repeat(TW)
   const lines = []
 
-  lines.push(tCenter(sale.branchName ?? 'Pizza & Toto'))
-  lines.push(tCenter('Grupo Lopval'))
-  lines.push(tCenter(`${date} ${time}`))
-  if (sale.cashier) lines.push(tCenter(`Cajero: ${sale.cashier}`))
+  // Solo items y totales van en <pre>
   lines.push(SEP)
-
   for (const i of (sale.items ?? [])) {
     lines.push(tRow(`${i.name} x${i.qty}`, mxn(i.price * i.qty)))
     if (i.selectedModifiers?.length > 0)
       lines.push(`  + ${i.selectedModifiers.map(m => m.name).join(', ')}`)
   }
   lines.push(SEP)
-
   if (sale.discount > 0) lines.push(tRow('Descuento', `-${mxn(sale.discount)}`))
   lines.push(tRow('TOTAL', mxn(sale.total)))
   lines.push('')
@@ -89,8 +84,21 @@ function buildTicketHtml(sale) {
   lines.push(tCenter('¡Gracias por su visita!'))
   lines.push(tCenter('Vuelva pronto'))
 
-  const logoUrl = esc(sale.branchLogoUrl ?? '/logo.svg')
-  return `<img src="${logoUrl}" width="56"><pre>${esc(lines.join('\n'))}</pre>`
+  // URL absoluta para que el iframe la resuelva correctamente
+  const origin = window.location.origin
+  const logoSrc = sale.branchLogoUrl?.startsWith('http')
+    ? esc(sale.branchLogoUrl)
+    : `${origin}${sale.branchLogoUrl ?? '/logo.svg'}`
+
+  return `
+    <div style="text-align:center;font-family:'Courier New',monospace;margin-bottom:4px">
+      <img src="${logoSrc}" width="56" style="display:block;margin:0 auto 3px;filter:grayscale(1) contrast(2) brightness(.3)"><br>
+      <b style="font-size:14px">${esc(sale.branchName ?? 'Pizza & Toto')}</b><br>
+      <span style="font-size:11px">Grupo Lopval</span><br>
+      <span style="font-size:10px">${date} ${time}</span>
+      ${sale.cashier ? `<br><span style="font-size:10px">Cajero: ${esc(sale.cashier)}</span>` : ''}
+    </div>
+    <pre>${esc(lines.join('\n'))}</pre>`
 }
 
 function buildCorteHtml({ cashRegister, summary, cashierName, activeBranch, closingAmt, notes }) {
@@ -134,8 +142,17 @@ function buildCorteHtml({ cashRegister, summary, cashierName, activeBranch, clos
   lines.push('')
   lines.push(tCenter('Grupo Lopval'))
 
-  const logoUrl = esc(activeBranch?.logo_url ?? '/logo.svg')
-  return `<img src="${logoUrl}" width="56"><pre>${esc(lines.join('\n'))}</pre>`
+  const origin  = window.location.origin
+  const logoSrc = activeBranch?.logo_url?.startsWith('http')
+    ? esc(activeBranch.logo_url)
+    : `${origin}${activeBranch?.logo_url ?? '/logo.svg'}`
+
+  return `
+    <div style="text-align:center;font-family:'Courier New',monospace;margin-bottom:4px">
+      <img src="${logoSrc}" width="56" style="display:block;margin:0 auto 3px;filter:grayscale(1) contrast(2) brightness(.3)"><br>
+      <b style="font-size:14px">${esc(activeBranch?.name ?? 'Sucursal')}</b>
+    </div>
+    <pre>${esc(lines.join('\n'))}</pre>`
 }
 
 export default function POS() {
