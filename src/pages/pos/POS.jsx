@@ -18,6 +18,114 @@ const CAT_COLORS = {
   'Extras':    'bg-yellow-100 text-yellow-700 ring-yellow-200',
 }
 
+// ─── Impresión por iframe — funciona en TODAS las impresoras térmicas ─────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+
+function printHtml(body) {
+  const frame = document.createElement('iframe')
+  frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:80mm;height:0;border:none'
+  document.body.appendChild(frame)
+  const doc = frame.contentDocument ?? frame.contentWindow.document
+  doc.open()
+  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:bold;color:#000;padding:3mm;width:72mm}
+    table{width:100%;border-collapse:collapse}
+    td{font-size:12px;font-weight:bold;color:#000;padding:1px 0;vertical-align:top}
+    b{font-weight:bold}
+    img{display:block;filter:grayscale(1) contrast(2) brightness(.3)}
+    @page{size:80mm auto;margin:0}
+  </style></head><body>${body}</body></html>`)
+  doc.close()
+  setTimeout(() => {
+    try { frame.contentWindow.focus(); frame.contentWindow.print() } catch {}
+    setTimeout(() => { try { document.body.removeChild(frame) } catch {} }, 1000)
+  }, 250)
+}
+
+function buildTicketHtml(sale) {
+  const now  = new Date()
+  const date = now.toLocaleDateString('es-MX')
+  const time = now.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' })
+  const METHODS = { efectivo:'Efectivo', tarjeta:'Tarjeta', transferencia:'Transferencia', plataforma: sale.platform_name ?? 'Plataforma' }
+
+  const rows = (sale.items ?? []).map(i => {
+    const mods = (i.selectedModifiers ?? []).map(m => esc(m.name)).join(', ')
+    return `<tr>
+      <td>${esc(i.name)} x${i.qty}</td>
+      <td align="right" nowrap width="1">${mxn(i.price * i.qty)}</td>
+    </tr>${mods ? `<tr><td colspan="2" style="padding-left:8px;font-size:11px">+ ${mods}</td></tr>` : ''}`
+  }).join('')
+
+  return `
+    <table cellspacing="0" cellpadding="0"><tr><td align="center" style="padding-bottom:6px">
+      <img src="${esc(sale.branchLogoUrl ?? '/logo.svg')}" width="48"><br>
+      <b style="font-size:14px">${esc(sale.branchName ?? 'Pizza &amp; Totó')}</b><br>
+      Grupo Lopval<br>
+      <span style="font-size:11px">${date} ${time}</span>
+      ${sale.cashier ? `<br><span style="font-size:11px">Cajero: ${esc(sale.cashier)}</span>` : ''}
+    </td></tr></table>
+    <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+    <table cellspacing="0" cellpadding="0"><tbody>${rows}</tbody></table>
+    <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+    <table cellspacing="0" cellpadding="0"><tbody>
+      ${sale.discount > 0 ? `<tr><td>Descuento</td><td align="right" nowrap width="1">-${mxn(sale.discount)}</td></tr>` : ''}
+      <tr>
+        <td style="font-size:14px;border-top:1px solid #000;padding-top:3px"><b>TOTAL</b></td>
+        <td align="right" nowrap width="1" style="font-size:14px;border-top:1px solid #000;padding-top:3px"><b>${mxn(sale.total)}</b></td>
+      </tr>
+      <tr><td colspan="2" style="padding-top:3px">Pago: ${METHODS[sale.payment_method] ?? sale.payment_method}</td></tr>
+      ${sale.change > 0 ? `<tr><td colspan="2">Cambio: ${mxn(sale.change)}</td></tr>` : ''}
+    </tbody></table>
+    <table cellspacing="0" cellpadding="0"><tr><td align="center" style="padding-top:8px;border-top:1px dashed #000">
+      ¡Gracias por su visita!<br>Vuelva pronto
+    </td></tr></table>`
+}
+
+function buildCorteHtml({ cashRegister, summary, cashierName, activeBranch, closingAmt, notes }) {
+  const date       = new Date(cashRegister.opening_at ?? Date.now()).toLocaleDateString('es-MX')
+  const expected   = Number(cashRegister.opening_amount) + (summary?.efectivo ?? 0)
+  const closingNum = parseFloat(closingAmt) || 0
+  const diff       = closingNum - expected
+  const row = (label, val) => `<tr><td>${esc(label)}</td><td align="right" nowrap width="1">${esc(val)}</td></tr>`
+  return `
+    <table cellspacing="0" cellpadding="0"><tr><td align="center" style="padding-bottom:6px">
+      <img src="${esc(activeBranch?.logo_url ?? '/logo.svg')}" width="48"><br>
+      <b style="font-size:14px">${esc(activeBranch?.name ?? 'Sucursal')}</b><br>
+      <b style="font-size:13px">CORTE DE TURNO</b><br>
+      <span style="font-size:12px">${date}</span><br>
+      <span style="font-size:12px">Cajero: ${esc(cashierName)}</span>
+    </td></tr></table>
+    <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+    <b style="font-size:11px">RESUMEN DEL TURNO</b>
+    <table cellspacing="0" cellpadding="1">
+      ${row('Apertura de caja', mxn(cashRegister.opening_amount))}
+      ${row('Ventas en efectivo', mxn(summary.efectivo))}
+      ${row('Ventas con tarjeta', mxn(summary.tarjeta))}
+      ${row('Transferencias', mxn(summary.transferencia ?? 0))}
+      ${row('Plataformas', mxn(summary.plataforma))}
+    </table>
+    <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+    <table cellspacing="0" cellpadding="1">
+      ${row(`Total (${summary.count} órdenes)`, mxn(summary.total))}
+    </table>
+    <hr style="border:none;border-top:1px solid #000;margin:4px 0">
+    <table cellspacing="0" cellpadding="1">
+      ${row('Efectivo esperado', mxn(expected))}
+      ${closingAmt !== '' ? row('Efectivo contado', mxn(closingNum)) : ''}
+      ${closingAmt !== '' ? row('Diferencia', (diff >= 0 ? '+' : '') + mxn(diff)) : ''}
+    </table>
+    ${notes ? `<hr style="border:none;border-top:1px dashed #000;margin:4px 0"><b>Notas:</b><br>${esc(notes)}` : ''}
+    <hr style="border:none;border-top:1px solid #000;margin:12px 0 6px">
+    Recibido por:<br><br><br>
+    <hr style="border:none;border-top:1px solid #000;margin:0 0 4px">
+    <div align="center">Firma y nombre</div><br>
+    Fecha: ___________________<br><br>
+    <div align="center">Grupo Lopval</div>`
+}
+
 export default function POS() {
   const { user, profile, activeBranch } = useAuth()
   const navigate = useNavigate()
@@ -736,7 +844,7 @@ function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400" />
             {error && <p className="text-red-500 text-sm">{error}</p>}
             <div className="flex gap-2">
-              <button onClick={() => window.print()}
+              <button onClick={() => printHtml(buildCorteHtml({ cashRegister, summary, cashierName, activeBranch, closingAmt, notes }))}
                 className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-3 text-sm font-medium transition-colors">
                 <Printer className="w-4 h-4" /> Imprimir corte
               </button>
@@ -749,70 +857,6 @@ function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed
         )}
       </div>
 
-      {/* Impresión del corte */}
-      {summary && (
-        <div className="print-only ticket">
-          <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-            <img src={activeBranch?.logo_url ?? '/logo.svg'} alt="Logo"
-              style={{ width: '60px', height: 'auto', display: 'block', margin: '0 auto 4px', filter: 'grayscale(1) contrast(2) brightness(0.3)' }} />
-            <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#000', margin: '0' }}>{activeBranch?.name ?? 'Sucursal'}</p>
-            <p style={{ fontSize: '13px', fontWeight: 'bold', color: '#000', margin: '4px 0 2px' }}>CORTE DE TURNO</p>
-            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000', margin: '1px 0' }}>
-              {new Date(cashRegister.opening_at ?? Date.now()).toLocaleDateString('es-MX')}
-            </p>
-            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000', margin: '1px 0' }}>Cajero: {cashierName}</p>
-          </div>
-
-          <div style={{ borderTop: '1px dashed #000', padding: '6px 0', margin: '4px 0' }}>
-            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000', margin: '0 0 4px', textTransform: 'uppercase' }}>Resumen del turno</p>
-            <RowPrint label="Apertura de caja"      value={mxn(cashRegister.opening_amount)} />
-            <RowPrint label="Ventas en efectivo"    value={mxn(summary.efectivo)} />
-            <RowPrint label="Ventas con tarjeta"    value={mxn(summary.tarjeta)} />
-            <RowPrint label="Transferencias"        value={mxn(summary.transferencia ?? 0)} />
-            <RowPrint label="Plataformas"           value={mxn(summary.plataforma)} />
-            <RowPrint label={`Total (${summary.count} órdenes)`} value={mxn(summary.total)} bold />
-          </div>
-
-          <div style={{ borderTop: '1px dashed #000', padding: '6px 0', margin: '4px 0' }}>
-            <RowPrint label="Efectivo esperado"   value={mxn(Number(cashRegister.opening_amount) + summary.efectivo)} bold />
-            <RowPrint label="Efectivo contado"    value={mxn(parseFloat(closingAmt) || 0)} bold />
-            {closingAmt !== '' && (
-              <RowPrint
-                label="Diferencia"
-                value={`${(parseFloat(closingAmt) - (Number(cashRegister.opening_amount) + summary.efectivo)) >= 0 ? '+' : ''}${mxn(parseFloat(closingAmt) - (Number(cashRegister.opening_amount) + summary.efectivo))}`}
-                bold
-              />
-            )}
-          </div>
-
-          {notes && (
-            <div style={{ borderTop: '1px dashed #000', padding: '6px 0 4px', margin: '4px 0', fontSize: '12px' }}>
-              <p style={{ margin: '0 0 2px', fontWeight: 'bold', color: '#000' }}>Notas:</p>
-              <p style={{ margin: 0, fontWeight: 'bold', color: '#000' }}>{notes}</p>
-            </div>
-          )}
-
-          <div style={{ borderTop: '1px solid #000', marginTop: '12px', paddingTop: '12px' }}>
-            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000', margin: '0 0 24px' }}>Recibido por:</p>
-            <div style={{ borderBottom: '1px solid #000', width: '100%', marginBottom: '6px' }} />
-            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000', margin: '0 0 16px', textAlign: 'center' }}>Firma y nombre</p>
-            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000', margin: '0 0 4px' }}>Fecha: ___________________</p>
-          </div>
-
-          <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '11px', color: '#000', fontWeight: 'bold' }}>
-            <p>Grupo Lopval</p>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function RowPrint({ label, value, bold }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '2px', color: '#000', fontWeight: bold ? 'bold' : '600' }}>
-      <span style={{ flex: 1, minWidth: 0, marginRight: '6px' }}>{label}</span>
-      <span style={{ flexShrink: 0 }}>{value}</span>
     </div>
   )
 }
@@ -915,118 +959,46 @@ function PaymentModal({ total, onClose, onComplete }) {
 // ─── Modal de Éxito + Ticket ──────────────────────────────────
 function SuccessModal({ sale, onClose }) {
   const methodLabel = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', plataforma: sale.platform_name }
-  const now = new Date()
 
   useEffect(() => {
-    const timer = setTimeout(() => window.print(), 600)
+    const timer = setTimeout(() => printHtml(buildTicketHtml(sale)), 600)
     return () => clearTimeout(timer)
   }, [])
 
   return (
-    <>
-      <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 no-print">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm text-center p-8">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="w-9 h-9 text-green-600" />
-          </div>
-          <h2 className="text-xl font-bold text-gray-800 mb-1">¡Venta registrada!</h2>
-          <p className="text-3xl font-black text-gray-900 mb-3">{mxn(sale.total)}</p>
-          <p className="text-sm text-gray-500 mb-1">Pago: {methodLabel[sale.payment_method]}</p>
-          {sale.change > 0 && <p className="text-sm font-semibold text-green-700 mb-4">Cambio: {mxn(sale.change)}</p>}
-          <div className="text-left bg-gray-50 rounded-xl p-3 mb-4 text-xs space-y-1">
-            {sale.items?.map(i => (
-              <div key={i.cartKey} className="text-gray-600">
-                <div className="flex justify-between">
-                  <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
-                </div>
-                {i.selectedModifiers?.length > 0 && (
-                  <p className="text-gray-400 pl-2">+ {i.selectedModifiers.map(m => m.name).join(', ')}</p>
-                )}
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm text-center p-8">
+        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <CheckCircle className="w-9 h-9 text-green-600" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-800 mb-1">¡Venta registrada!</h2>
+        <p className="text-3xl font-black text-gray-900 mb-3">{mxn(sale.total)}</p>
+        <p className="text-sm text-gray-500 mb-1">Pago: {methodLabel[sale.payment_method]}</p>
+        {sale.change > 0 && <p className="text-sm font-semibold text-green-700 mb-4">Cambio: {mxn(sale.change)}</p>}
+        <div className="text-left bg-gray-50 rounded-xl p-3 mb-4 text-xs space-y-1">
+          {sale.items?.map(i => (
+            <div key={i.cartKey} className="text-gray-600">
+              <div className="flex justify-between">
+                <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
               </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => window.print()}
-              className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-3 text-sm font-medium transition-colors">
-              <Printer className="w-4 h-4" /> Reimprimir
-            </button>
-            <button onClick={onClose}
-              className="flex-1 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl py-3 transition-colors">
-              Nueva venta
-            </button>
-          </div>
+              {i.selectedModifiers?.length > 0 && (
+                <p className="text-gray-400 pl-2">+ {i.selectedModifiers.map(m => m.name).join(', ')}</p>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => printHtml(buildTicketHtml(sale))}
+            className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-3 text-sm font-medium transition-colors">
+            <Printer className="w-4 h-4" /> Reimprimir
+          </button>
+          <button onClick={onClose}
+            className="flex-1 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl py-3 transition-colors">
+            Nueva venta
+          </button>
         </div>
       </div>
-
-      <div className="print-only">
-        {/* Encabezado centrado */}
-        <div style={{ textAlign: 'center', marginBottom: '6px' }}>
-          <img src={sale.branchLogoUrl ?? '/logo.svg'} alt=""
-            style={{ width: '48px', height: 'auto', margin: '0 auto 3px', filter: 'grayscale(1) contrast(2) brightness(0.3)' }} />
-          <div style={{ fontSize: '14px', fontWeight: 'bold' }}>{sale.branchName ?? 'Pizza & Totó'}</div>
-          <div style={{ fontSize: '12px' }}>Grupo Lopval</div>
-          <div style={{ fontSize: '11px' }}>{now.toLocaleDateString('es-MX')} {now.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})}</div>
-          {sale.cashier && <div style={{ fontSize: '11px' }}>Cajero: {sale.cashier}</div>}
-        </div>
-
-        {/* Línea separadora */}
-        <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
-
-        {/* Productos */}
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <tbody>
-            {sale.items?.map((i, idx) => (
-              <>
-                <tr key={idx}>
-                  <td style={{ fontSize: '12px', paddingRight: '4px' }}>{i.name} x{i.qty}</td>
-                  <td style={{ fontSize: '12px', textAlign: 'right', whiteSpace: 'nowrap', width: '1%' }}>{mxn(i.price * i.qty)}</td>
-                </tr>
-                {i.selectedModifiers?.length > 0 && (
-                  <tr key={idx + '-mod'}>
-                    <td colSpan={2} style={{ fontSize: '11px', paddingLeft: '8px' }}>
-                      + {i.selectedModifiers.map(m => m.name).join(', ')}
-                    </td>
-                  </tr>
-                )}
-              </>
-            ))}
-          </tbody>
-        </table>
-
-        {/* Línea separadora */}
-        <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
-
-        {/* Totales */}
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <tbody>
-            {sale.discount > 0 && (
-              <tr>
-                <td style={{ fontSize: '12px' }}>Descuento</td>
-                <td style={{ fontSize: '12px', textAlign: 'right', whiteSpace: 'nowrap', width: '1%' }}>-{mxn(sale.discount)}</td>
-              </tr>
-            )}
-            <tr>
-              <td style={{ fontSize: '14px', fontWeight: 'bold', borderTop: '1px solid #000', paddingTop: '3px' }}>TOTAL</td>
-              <td style={{ fontSize: '14px', fontWeight: 'bold', textAlign: 'right', whiteSpace: 'nowrap', width: '1%', borderTop: '1px solid #000', paddingTop: '3px' }}>{mxn(sale.total)}</td>
-            </tr>
-            <tr>
-              <td colSpan={2} style={{ fontSize: '12px', paddingTop: '3px' }}>Pago: {methodLabel[sale.payment_method]}</td>
-            </tr>
-            {sale.change > 0 && (
-              <tr>
-                <td colSpan={2} style={{ fontSize: '12px' }}>Cambio: {mxn(sale.change)}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-
-        {/* Pie */}
-        <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '11px', borderTop: '1px dashed #000', paddingTop: '6px' }}>
-          <div>¡Gracias por su visita!</div>
-          <div>Vuelva pronto</div>
-        </div>
-      </div>
-    </>
+    </div>
   )
 }
 
