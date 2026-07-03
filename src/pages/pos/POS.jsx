@@ -19,7 +19,7 @@ const CAT_COLORS = {
 }
 
 // ─── Impresión por iframe — texto plano con <pre> para máxima compatibilidad ──
-const TW = 40 // caracteres por línea (80mm ≈ 40 chars en Courier 12px)
+const TW = 32 // caracteres por línea (80mm con 7mm de margen lateral ≈ 32 chars)
 
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -100,7 +100,7 @@ function printHtml(body) {
   doc.open()
   doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:bold;color:#000;padding:3mm}
+    body{font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:bold;color:#000;padding:4mm 7mm}
     pre{font-family:inherit;font-size:inherit;font-weight:inherit;white-space:pre;line-height:1.4}
     img{display:block;margin:0 auto 4px;filter:grayscale(1) contrast(2) brightness(.3)}
     @page{size:80mm auto;margin:0}
@@ -112,12 +112,12 @@ function printHtml(body) {
   }, 700)
 }
 
-// Fila de tabla: [qty:4][nombre:20][p.u.:8][monto:8] = 40 chars
+// Fila de tabla: [qty:3][nombre:15][p.u.:7][monto:7] = 32 chars
 function tItemRow(qty, name, pu, monto) {
-  const q = String(qty).padStart(4)
-  const n = String(name).slice(0, 20).padEnd(20)
-  const p = String(pu).padStart(8)
-  const a = String(monto).padStart(8)
+  const q = String(qty).padStart(3)
+  const n = String(name).slice(0, 15).padEnd(15)
+  const p = String(pu).padStart(7)
+  const a = String(monto).padStart(7)
   return `${q}${n}${p}${a}`
 }
 
