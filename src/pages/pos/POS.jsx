@@ -39,6 +39,20 @@ function tRow(left, right) {
   return left + ' '.repeat(spaces) + right
 }
 
+// Convierte cualquier URL de imagen a base64 para embeber en el iframe
+async function toBase64(url) {
+  try {
+    const abs = url.startsWith('http') ? url : window.location.origin + url
+    const res  = await fetch(abs)
+    const blob = await res.blob()
+    return await new Promise(resolve => {
+      const r = new FileReader()
+      r.onloadend = () => resolve(r.result)
+      r.readAsDataURL(blob)
+    })
+  } catch { return null }
+}
+
 function printHtml(body) {
   const frame = document.createElement('iframe')
   frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:80mm;height:0;border:none'
@@ -59,7 +73,7 @@ function printHtml(body) {
   }, 250)
 }
 
-function buildTicketHtml(sale) {
+async function buildTicketHtml(sale) {
   const now  = new Date()
   const date = now.toLocaleDateString('es-MX')
   const time = now.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' })
@@ -67,7 +81,6 @@ function buildTicketHtml(sale) {
   const SEP = '-'.repeat(TW)
   const lines = []
 
-  // Solo items y totales van en <pre>
   lines.push(SEP)
   for (const i of (sale.items ?? [])) {
     lines.push(tRow(`${i.name} x${i.qty}`, mxn(i.price * i.qty)))
@@ -84,15 +97,14 @@ function buildTicketHtml(sale) {
   lines.push(tCenter('¡Gracias por su visita!'))
   lines.push(tCenter('Vuelva pronto'))
 
-  // URL absoluta para que el iframe la resuelva correctamente
-  const origin = window.location.origin
-  const logoSrc = sale.branchLogoUrl?.startsWith('http')
-    ? esc(sale.branchLogoUrl)
-    : `${origin}${sale.branchLogoUrl ?? '/logo.svg'}`
+  const logoB64 = await toBase64(sale.branchLogoUrl ?? '/logo.svg')
+  const logoHtml = logoB64
+    ? `<img src="${logoB64}" width="56" style="display:block;margin:0 auto 3px;filter:grayscale(1) contrast(2) brightness(.3)"><br>`
+    : ''
 
   return `
     <div style="text-align:center;font-family:'Courier New',monospace;margin-bottom:4px">
-      <img src="${logoSrc}" width="56" style="display:block;margin:0 auto 3px;filter:grayscale(1) contrast(2) brightness(.3)"><br>
+      ${logoHtml}
       <b style="font-size:14px">${esc(sale.branchName ?? 'Pizza & Toto')}</b><br>
       <span style="font-size:11px">Grupo Lopval</span><br>
       <span style="font-size:10px">${date} ${time}</span>
@@ -101,7 +113,7 @@ function buildTicketHtml(sale) {
     <pre>${esc(lines.join('\n'))}</pre>`
 }
 
-function buildCorteHtml({ cashRegister, summary, cashierName, activeBranch, closingAmt, notes }) {
+async function buildCorteHtml({ cashRegister, summary, cashierName, activeBranch, closingAmt, notes }) {
   const date       = new Date(cashRegister.opening_at ?? Date.now()).toLocaleDateString('es-MX')
   const expected   = Number(cashRegister.opening_amount) + (summary?.efectivo ?? 0)
   const closingNum = parseFloat(closingAmt) || 0
@@ -142,14 +154,14 @@ function buildCorteHtml({ cashRegister, summary, cashierName, activeBranch, clos
   lines.push('')
   lines.push(tCenter('Grupo Lopval'))
 
-  const origin  = window.location.origin
-  const logoSrc = activeBranch?.logo_url?.startsWith('http')
-    ? esc(activeBranch.logo_url)
-    : `${origin}${activeBranch?.logo_url ?? '/logo.svg'}`
+  const logoB64   = await toBase64(activeBranch?.logo_url ?? '/logo.svg')
+  const logoHtml  = logoB64
+    ? `<img src="${logoB64}" width="56" style="display:block;margin:0 auto 3px;filter:grayscale(1) contrast(2) brightness(.3)"><br>`
+    : ''
 
   return `
     <div style="text-align:center;font-family:'Courier New',monospace;margin-bottom:4px">
-      <img src="${logoSrc}" width="56" style="display:block;margin:0 auto 3px;filter:grayscale(1) contrast(2) brightness(.3)"><br>
+      ${logoHtml}
       <b style="font-size:14px">${esc(activeBranch?.name ?? 'Sucursal')}</b>
     </div>
     <pre>${esc(lines.join('\n'))}</pre>`
@@ -873,7 +885,7 @@ function CorteModal({ cashRegister, cashierName, activeBranch, onClose, onClosed
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400" />
             {error && <p className="text-red-500 text-sm">{error}</p>}
             <div className="flex gap-2">
-              <button onClick={() => printHtml(buildCorteHtml({ cashRegister, summary, cashierName, activeBranch, closingAmt, notes }))}
+              <button onClick={async () => printHtml(await buildCorteHtml({ cashRegister, summary, cashierName, activeBranch, closingAmt, notes }))}
                 className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-3 text-sm font-medium transition-colors">
                 <Printer className="w-4 h-4" /> Imprimir corte
               </button>
@@ -990,7 +1002,7 @@ function SuccessModal({ sale, onClose }) {
   const methodLabel = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', plataforma: sale.platform_name }
 
   useEffect(() => {
-    const timer = setTimeout(() => printHtml(buildTicketHtml(sale)), 600)
+    const timer = setTimeout(async () => printHtml(await buildTicketHtml(sale)), 600)
     return () => clearTimeout(timer)
   }, [])
 
@@ -1017,7 +1029,7 @@ function SuccessModal({ sale, onClose }) {
           ))}
         </div>
         <div className="flex gap-2">
-          <button onClick={() => printHtml(buildTicketHtml(sale))}
+          <button onClick={async () => printHtml(await buildTicketHtml(sale))}
             className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-3 text-sm font-medium transition-colors">
             <Printer className="w-4 h-4" /> Reimprimir
           </button>
