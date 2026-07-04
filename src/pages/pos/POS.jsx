@@ -141,7 +141,16 @@ async function buildTicketHtml(sale) {
   lines.push(`I.V.A. (Incluido): ${mxn(iva)}`)
   lines.push('')
   lines.push(`Le atendió: ${esc(sale.cashier ?? 'Cajero')}`)
-  lines.push(`Método: ${METHODS[sale.payment_method] ?? sale.payment_method}`)
+  if (sale.payments?.length > 1) {
+    lines.push('Pagos:')
+    for (const p of sale.payments) {
+      const label = METHODS[p.method] ?? p.method
+      const detail = p.platform ? ` (${p.platform})` : ''
+      lines.push(tRow(`  ${label}${detail}`, mxn(p.amount)))
+    }
+  } else {
+    lines.push(`Método: ${METHODS[sale.payment_method] ?? sale.payment_method}`)
+  }
   if (sale.change > 0) lines.push(`Cambio: ${mxn(sale.change)}`)
   lines.push(SEP2)
   if (info.address) {
@@ -346,8 +355,13 @@ export default function POS() {
   const discountAmt = Math.min(parseFloat(discount) || 0, subtotal)
   const total       = subtotal - discountAmt
 
-  async function completeSale(paymentMethod, platformName, cashReceived) {
-    const changeGiven = paymentMethod === 'efectivo' ? (cashReceived - total) : 0
+  async function completeSale(payments) {
+    const totalPaid     = payments.reduce((s, p) => s + p.amount, 0)
+    const changeGiven   = Math.max(0, totalPaid - total)
+    const primaryMethod = payments.length === 1 ? payments[0].method : 'mixto'
+    const platformName  = payments.find(p => p.method === 'plataforma')?.platform ?? null
+    const cashReceived  = payments.filter(p => p.method === 'efectivo').reduce((s, p) => s + p.amount, 0)
+
     const { data: sale, error } = await supabase.from('sales').insert({
       cashier_id:       user?.id,
       cashier_name:     profile?.name ?? 'Cajero',
@@ -358,10 +372,11 @@ export default function POS() {
       discount:         discountAmt,
       discount_reason:  discReason || null,
       total,
-      payment_method:   paymentMethod,
-      platform_name:    platformName || null,
-      cash_received:    paymentMethod === 'efectivo' ? cashReceived : null,
-      change_given:     paymentMethod === 'efectivo' ? changeGiven  : null,
+      payment_method:   primaryMethod,
+      platform_name:    platformName,
+      cash_received:    cashReceived > 0 ? cashReceived : null,
+      change_given:     changeGiven  > 0 ? changeGiven  : null,
+      payments,
       status:           'completed',
     }).select().single()
 
@@ -383,7 +398,7 @@ export default function POS() {
     )
 
     const cashierName = (profile?.name && !profile.name.includes('@')) ? profile.name : 'Cajero'
-    setLastSale({ ...sale, items: cart, change: changeGiven, cashier: cashierName, branchId: activeBranch?.id, branchName: activeBranch?.name, branchLogoUrl: activeBranch?.logo_url ?? '/logo.svg' })
+    setLastSale({ ...sale, items: cart, change: changeGiven, cashier: cashierName, branchId: activeBranch?.id, branchName: activeBranch?.name, branchLogoUrl: activeBranch?.logo_url ?? '/logo.svg', payments })
     clearCart()
     setShowPayment(false)
     fetchRecentSales()
@@ -970,83 +985,150 @@ function Row({ label, value, cls = 'text-gray-800', bold = false }) {
 
 // ─── Modal de Pago ────────────────────────────────────────────
 function PaymentModal({ total, onClose, onComplete }) {
-  const [method,   setMethod]   = useState('efectivo')
-  const [platform, setPlatform] = useState('')
-  const [cash,     setCash]     = useState('')
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
+  const [payments,    setPayments]    = useState([])
+  const [curMethod,   setCurMethod]   = useState('efectivo')
+  const [curAmount,   setCurAmount]   = useState('')
+  const [curPlatform, setCurPlatform] = useState('')
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState('')
 
-  const cashNum   = parseFloat(cash) || 0
-  const change    = cashNum - total
-  const validCash = method !== 'efectivo' || cashNum >= total
+  const totalPaid  = payments.reduce((s, p) => s + p.amount, 0)
+  const remaining  = Math.max(0, total - totalPaid)
+  const change     = Math.max(0, totalPaid - total)
+  const canConfirm = totalPaid >= total && payments.length > 0
+
+  const METHODS = [
+    { id: 'efectivo',      icon: Banknote,       label: 'Efectivo'      },
+    { id: 'tarjeta',       icon: CreditCard,      label: 'Tarjeta'       },
+    { id: 'transferencia', icon: ArrowLeftRight,  label: 'Transferencia' },
+    { id: 'plataforma',    icon: Smartphone,      label: 'Plataforma'    },
+  ]
+  const methodLabel = id => METHODS.find(m => m.id === id)?.label ?? id
+
+  function addPayment() {
+    const amt = parseFloat(curAmount)
+    if (!amt || amt <= 0) { setError('Ingresa un monto válido'); return }
+    if (curMethod === 'plataforma' && !curPlatform) { setError('Selecciona la plataforma'); return }
+    setPayments(prev => [...prev, { method: curMethod, amount: amt, platform: curPlatform || null }])
+    setCurAmount(''); setCurPlatform(''); setError('')
+  }
 
   async function handleConfirm() {
-    if (!validCash) { setError('El efectivo recibido es menor al total'); return }
-    if (method === 'plataforma' && !platform) { setError('Selecciona la plataforma'); return }
+    if (!canConfirm) return
     setLoading(true); setError('')
-    try { await onComplete(method, platform, cashNum) }
+    try { await onComplete(payments) }
     catch { setError('Error al guardar la venta. Intenta de nuevo.'); setLoading(false) }
   }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b">
-          <h2 className="font-bold text-gray-800 text-lg">Método de pago</h2>
+          <h2 className="font-bold text-gray-800 text-lg">Cobro</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-5 space-y-4">
-          <p className="text-center text-3xl font-black text-gray-900">{mxn(total)}</p>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { id: 'efectivo',      icon: Banknote,          label: 'Efectivo'      },
-              { id: 'tarjeta',       icon: CreditCard,        label: 'Tarjeta'       },
-              { id: 'transferencia', icon: ArrowLeftRight,    label: 'Transferencia' },
-              { id: 'plataforma',    icon: Smartphone,        label: 'Plataforma'    },
-            ].map(({ id, icon: Icon, label }) => (
-              <button key={id} onClick={() => setMethod(id)}
-                className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
-                  method === id ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }`}>
-                <Icon className="w-5 h-5" />
-                <span className="text-xs font-medium">{label}</span>
-              </button>
-            ))}
+
+          {/* Total */}
+          <div className="flex justify-between items-center">
+            <span className="text-gray-500 text-sm">Total a cobrar</span>
+            <span className="text-2xl font-black text-gray-900">{mxn(total)}</span>
           </div>
-          {method === 'efectivo' && (
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Efectivo recibido</label>
-              <input type="number" value={cash} onChange={e => setCash(e.target.value)}
-                placeholder="$0.00" autoFocus
-                className="w-full border rounded-xl px-4 py-2.5 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-gray-400" />
-              <div className="flex gap-2 mt-2">
-                {[50,100,200,500].map(v => (
-                  <button key={v} onClick={() => setCash(String(v))}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-1.5 text-sm font-medium transition-colors">${v}</button>
-                ))}
-              </div>
-              {cashNum >= total && (
-                <div className="mt-2 bg-green-50 border border-green-200 rounded-xl px-4 py-2 text-center">
-                  <p className="text-sm text-green-700">Cambio: <span className="font-bold text-lg">{mxn(change)}</span></p>
+
+          {/* Pagos ya agregados */}
+          {payments.length > 0 && (
+            <div className="space-y-1.5">
+              {payments.map((p, i) => (
+                <div key={i} className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2">
+                  <span className="text-sm text-gray-700">
+                    {methodLabel(p.method)}{p.platform ? ` · ${p.platform}` : ''}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-900">{mxn(p.amount)}</span>
+                    <button onClick={() => setPayments(prev => prev.filter((_, j) => j !== i))}
+                      className="text-gray-300 hover:text-red-500 transition-colors">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {change > 0 && (
+                <div className="flex justify-between bg-green-50 rounded-xl px-3 py-2">
+                  <span className="text-sm text-green-700 font-medium">Cambio</span>
+                  <span className="text-sm font-bold text-green-700">{mxn(change)}</span>
+                </div>
+              )}
+              {remaining > 0 && (
+                <div className="flex justify-between bg-amber-50 rounded-xl px-3 py-2">
+                  <span className="text-sm text-amber-700 font-medium">Pendiente</span>
+                  <span className="text-sm font-bold text-amber-700">{mxn(remaining)}</span>
                 </div>
               )}
             </div>
           )}
-          {method === 'plataforma' && (
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Plataforma</label>
-              <select value={platform} onChange={e => setPlatform(e.target.value)}
-                className="w-full border rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-gray-400">
-                <option value="">Seleccionar...</option>
-                <option>Rappi</option><option>Uber Eats</option><option>Mercado Pago</option>
-                <option>DiDi Food</option><option>WhatsApp / Teléfono</option><option>Otra</option>
-              </select>
+
+          {/* Formulario para agregar pago */}
+          {remaining > 0 && (
+            <div className="border border-gray-200 rounded-xl p-3 space-y-3">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Agregar pago</p>
+
+              {/* Métodos */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {METHODS.map(({ id, icon: Icon, label }) => (
+                  <button key={id} onClick={() => setCurMethod(id)}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-xl border-2 transition-all ${
+                      curMethod === id ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                    }`}>
+                    <Icon className="w-4 h-4" />
+                    <span className="text-[10px] font-medium leading-tight text-center">{label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Plataforma */}
+              {curMethod === 'plataforma' && (
+                <select value={curPlatform} onChange={e => setCurPlatform(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400">
+                  <option value="">Seleccionar plataforma...</option>
+                  <option>Rappi</option><option>Uber Eats</option><option>Mercado Pago</option>
+                  <option>DiDi Food</option><option>WhatsApp / Teléfono</option><option>Otra</option>
+                </select>
+              )}
+
+              {/* Monto */}
+              <div className="flex gap-2">
+                <input type="number" value={curAmount} onChange={e => setCurAmount(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addPayment()}
+                  placeholder={`$${remaining.toFixed(2)}`} autoFocus
+                  className="flex-1 border rounded-xl px-3 py-2.5 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-gray-400" />
+                <button onClick={() => setCurAmount(String(remaining))}
+                  className="px-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-xs font-semibold text-gray-600 whitespace-nowrap transition-colors">
+                  Todo
+                </button>
+              </div>
+
+              {/* Billetes rápidos */}
+              <div className="flex gap-1.5">
+                {[50,100,200,500].map(v => (
+                  <button key={v} onClick={() => setCurAmount(String(v))}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-1.5 text-xs font-medium transition-colors">
+                    ${v}
+                  </button>
+                ))}
+              </div>
+
+              <button onClick={addPayment}
+                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold rounded-xl py-2.5 text-sm transition-colors">
+                + Agregar pago
+              </button>
             </div>
           )}
+
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-          <button onClick={handleConfirm} disabled={loading}
-            className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-bold rounded-xl py-3.5 transition-colors">
-            {loading ? 'Procesando...' : 'Confirmar venta'}
+
+          <button onClick={handleConfirm} disabled={!canConfirm || loading}
+            className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-40 text-white font-bold rounded-xl py-3.5 transition-colors">
+            {loading ? 'Procesando...' : canConfirm ? `Confirmar · ${mxn(total)}` : `Pendiente ${mxn(remaining)}`}
           </button>
         </div>
       </div>
