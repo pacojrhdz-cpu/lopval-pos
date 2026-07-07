@@ -1,0 +1,389 @@
+import { useState, useEffect } from 'react'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
+import { Plus, Trash2, Send, ClipboardCheck, Clock, CheckCircle, XCircle, ChevronDown, ChevronRight, Printer } from 'lucide-react'
+
+async function toBase64Req(url) {
+  if (!url) return null
+  try {
+    const abs = url.startsWith('http') ? url : window.location.origin + url
+    const res  = await fetch(abs)
+    const blob = await res.blob()
+    return await new Promise(resolve => {
+      const r = new FileReader()
+      r.onloadend = () => resolve(r.result)
+      r.readAsDataURL(blob)
+    })
+  } catch { return null }
+}
+
+async function printRequisition(req, logoUrl = null) {
+  const logoB64 = await toBase64Req(logoUrl)
+  const date = new Date(req.created_at).toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' })
+
+  const STATUS_TEXT  = { pendiente: 'PENDIENTE', aprobada: 'APROBADA', rechazada: 'RECHAZADA' }
+  const STATUS_COLOR = { pendiente: '#f59e0b', aprobada: '#22c55e', rechazada: '#ef4444' }
+  const STATUS_BG    = { pendiente: '#fffbeb', aprobada: '#f0fdf4', rechazada: '#fef2f2' }
+  const statusColor  = STATUS_COLOR[req.status] ?? '#6b7280'
+  const statusBg     = STATUS_BG[req.status]    ?? '#fff'
+
+  const itemRows = (req.requisition_items ?? []).map((ri, idx) => `
+    <tr style="background:${idx % 2 === 0 ? '#fff' : '#f9fafb'}">
+      <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;font-size:12px">${ri.ingredient_name || ri.ingredients?.name || ''}</td>
+      <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:700;font-size:12px">${ri.quantity_requested}</td>
+      <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;text-align:center;color:#6b7280;font-size:12px">${ri.unit || ri.ingredients?.unit || ''}</td>
+    </tr>`).join('')
+
+  const logoHtml = logoB64
+    ? `<img src="${logoB64}" style="height:56px;filter:invert(1) brightness(2);opacity:0.9">`
+    : `<div style="width:52px;height:52px;background:#222;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:#fff">${(req.branch_name ?? 'L').charAt(0).toUpperCase()}</div>`
+
+  const notesHtml = req.notes ? `
+    <div style="margin-top:16px;padding:12px 16px;background:#f9fafb;border-left:3px solid #111;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#6b7280;margin-bottom:4px">Nota del solicitante</div>
+      <div style="font-size:12px;color:#374151">${req.notes}</div>
+    </div>` : ''
+
+  const reviewHtml = req.review_note ? `
+    <div style="margin-top:10px;padding:12px 16px;background:${statusBg};border-left:3px solid ${statusColor};border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#6b7280;margin-bottom:4px">Nota del responsable</div>
+      <div style="font-size:12px;color:#374151">${req.review_note}</div>
+    </div>` : ''
+
+  const body = `
+    <div style="background:#111;color:#fff;padding:22px 32px;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#9ca3af;margin-bottom:6px">Grupo Lopval</div>
+        <div style="font-size:22px;font-weight:900;letter-spacing:-0.5px;line-height:1">Requisición</div>
+        <div style="font-size:13px;color:#d1d5db;margin-top:4px;letter-spacing:0.5px">de Insumos</div>
+        <div style="font-size:11px;color:#9ca3af;margin-top:8px">${req.branch_name ?? 'Sucursal'}</div>
+      </div>
+      ${logoHtml}
+    </div>
+
+    <div style="background:#f3f4f6;padding:14px 32px;display:flex;border-bottom:2px solid #e5e7eb">
+      <div style="flex:0 0 auto;padding-right:24px;margin-right:24px;border-right:1px solid #d1d5db">
+        <div style="font-size:9px;color:#9ca3af;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px">Folio</div>
+        <div style="font-size:14px;font-weight:800;font-family:monospace">#${req.id.slice(0,8).toUpperCase()}</div>
+      </div>
+      <div style="flex:2;padding-right:24px;margin-right:24px;border-right:1px solid #d1d5db">
+        <div style="font-size:9px;color:#9ca3af;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px">Fecha</div>
+        <div style="font-size:12px;font-weight:500">${date}</div>
+      </div>
+      <div style="flex:1.5;padding-right:24px;margin-right:24px;border-right:1px solid #d1d5db">
+        <div style="font-size:9px;color:#9ca3af;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px">Solicitó</div>
+        <div style="font-size:12px;font-weight:600">${req.cashier_name ?? '—'}</div>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:9px;color:#9ca3af;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px">Estado</div>
+        <div style="font-size:12px;font-weight:800;color:${statusColor}">${STATUS_TEXT[req.status] ?? req.status}</div>
+      </div>
+    </div>
+
+    <div style="padding:24px 32px">
+      <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#6b7280;margin-bottom:10px">Insumos solicitados</div>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb">
+        <thead>
+          <tr style="background:#111;color:#fff">
+            <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;letter-spacing:0.5px">Insumo</th>
+            <th style="text-align:right;padding:10px 14px;font-size:11px;font-weight:600;letter-spacing:0.5px">Cantidad</th>
+            <th style="text-align:center;padding:10px 14px;font-size:11px;font-weight:600;letter-spacing:0.5px">Unidad</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+
+      ${notesHtml}
+      ${reviewHtml}
+
+      <div style="margin-top:52px;display:flex;gap:48px">
+        <div style="flex:1">
+          <div style="border-top:1.5px solid #111;padding-top:8px">
+            <div style="font-size:11px;font-weight:700;color:#374151">${req.cashier_name ?? 'Solicitante'}</div>
+            <div style="font-size:9px;color:#9ca3af;margin-top:2px;text-transform:uppercase;letter-spacing:1px">Solicitó</div>
+          </div>
+        </div>
+        <div style="flex:1">
+          <div style="border-top:1.5px solid #111;padding-top:8px">
+            <div style="font-size:11px;font-weight:700;color:#374151">______________________________</div>
+            <div style="font-size:9px;color:#9ca3af;margin-top:2px;text-transform:uppercase;letter-spacing:1px">Autorizó</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:32px;padding-top:12px;border-top:1px solid #e5e7eb;text-align:center;font-size:9px;color:#9ca3af;letter-spacing:1px">
+        GRUPO LOPVAL · DOCUMENTO INTERNO
+      </div>
+    </div>`
+
+  const frame = document.createElement('iframe')
+  frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:210mm;height:0;border:none'
+  document.body.appendChild(frame)
+  const doc = frame.contentDocument ?? frame.contentWindow.document
+  doc.open()
+  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff}
+    @page{size:A4;margin:0}
+  </style></head><body>${body}</body></html>`)
+  doc.close()
+  setTimeout(() => {
+    try { frame.contentWindow.focus(); frame.contentWindow.print() } catch {}
+    setTimeout(() => { try { document.body.removeChild(frame) } catch {} }, 2000)
+  }, 500)
+}
+
+const STATUS_LABEL = {
+  pendiente: { label: 'Pendiente',  cls: 'bg-amber-100 text-amber-700'  },
+  aprobada:  { label: 'Aprobada',   cls: 'bg-green-100 text-green-700'  },
+  rechazada: { label: 'Rechazada',  cls: 'bg-red-100   text-red-700'    },
+}
+
+export default function Requisition() {
+  const { user, profile, activeBranch } = useAuth()
+  const [ingredients, setIngredients] = useState([])
+  const [items,       setItems]       = useState([{ ingredient_id: '', quantity: '', notes: '' }])
+  const [genNotes,    setGenNotes]    = useState('')
+  const [saving,      setSaving]      = useState(false)
+  const [success,     setSuccess]     = useState(false)
+  const [error,       setError]       = useState('')
+  const [history,     setHistory]     = useState([])
+  const [expanded,    setExpanded]    = useState(null)
+  const [loadingHist, setLoadingHist] = useState(true)
+
+  useEffect(() => {
+    fetchIngredients()
+    fetchHistory()
+  }, [])
+
+  async function fetchIngredients() {
+    const { data } = await supabase.from('ingredients').select('id,name,unit').eq('active', true).order('name')
+    setIngredients(data ?? [])
+  }
+
+  async function fetchHistory() {
+    setLoadingHist(true)
+    const { data } = await supabase
+      .from('requisitions')
+      .select('*, requisition_items(*, ingredients(name,unit))')
+      .eq('created_by', user?.id)
+      .order('created_at', { ascending: false })
+      .limit(10)
+    setHistory(data ?? [])
+    setLoadingHist(false)
+  }
+
+  function addRow() {
+    setItems(prev => [...prev, { ingredient_id: '', quantity: '', notes: '' }])
+  }
+
+  function removeRow(idx) {
+    setItems(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  function updateRow(idx, field, value) {
+    setItems(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r))
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    const validItems = items.filter(r => r.ingredient_id && r.quantity)
+    if (validItems.length === 0) {
+      setError('Agrega al menos un insumo con cantidad')
+      return
+    }
+    setSaving(true)
+    setError('')
+
+    const { data: req, error: reqErr } = await supabase
+      .from('requisitions')
+      .insert({
+        created_by:   user?.id,
+        cashier_name: profile?.name ?? 'Cajero',
+        branch_id:    activeBranch?.id   ?? null,
+        branch_name:  activeBranch?.name ?? null,
+        notes:        genNotes || null,
+        status:       'pendiente',
+      })
+      .select()
+      .single()
+
+    if (reqErr) { setError('Error al enviar. Intenta de nuevo.'); setSaving(false); return }
+
+    const ing = ingredients.reduce((m, i) => ({ ...m, [i.id]: i }), {})
+    await supabase.from('requisition_items').insert(
+      validItems.map(r => ({
+        requisition_id:    req.id,
+        ingredient_id:     r.ingredient_id,
+        ingredient_name:   ing[r.ingredient_id]?.name ?? '',
+        quantity_requested: parseFloat(r.quantity),
+        unit:              ing[r.ingredient_id]?.unit ?? '',
+        notes:             r.notes || null,
+      }))
+    )
+
+    setItems([{ ingredient_id: '', quantity: '', notes: '' }])
+    setGenNotes('')
+    setSaving(false)
+    setSuccess(true)
+    setTimeout(() => setSuccess(false), 3000)
+    fetchHistory()
+  }
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <ClipboardCheck className="w-6 h-6 text-gray-800" />
+        <h1 className="text-2xl font-bold text-gray-900">Requisición de insumos</h1>
+      </div>
+
+      {/* Formulario */}
+      <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
+        <h2 className="font-semibold text-gray-700">Nueva solicitud</h2>
+
+        <div className="space-y-3">
+          {items.map((row, idx) => {
+            const ing = ingredients.find(i => i.id === row.ingredient_id)
+            return (
+              <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                <div className="col-span-5">
+                  <select
+                    value={row.ingredient_id}
+                    onChange={e => updateRow(idx, 'ingredient_id', e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                  >
+                    <option value="">Insumo...</option>
+                    {ingredients.map(i => (
+                      <option key={i.id} value={i.id}>{i.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-3">
+                  <div className="relative">
+                    <input
+                      type="number" min="0.001" step="any"
+                      value={row.quantity}
+                      onChange={e => updateRow(idx, 'quantity', e.target.value)}
+                      placeholder="Cantidad"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 pr-10"
+                    />
+                    {ing && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">{ing.unit}</span>}
+                  </div>
+                </div>
+                <div className="col-span-3">
+                  <input
+                    value={row.notes}
+                    onChange={e => updateRow(idx, 'notes', e.target.value)}
+                    placeholder="Nota (opc.)"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                  />
+                </div>
+                <div className="col-span-1 flex justify-center">
+                  {items.length > 1 && (
+                    <button type="button" onClick={() => removeRow(idx)}
+                      className="text-gray-300 hover:text-red-500 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <button type="button" onClick={addRow}
+          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 border border-dashed border-gray-300 hover:border-gray-500 rounded-lg px-4 py-2 w-full justify-center transition-colors">
+          <Plus className="w-4 h-4" /> Agregar insumo
+        </button>
+
+        <textarea
+          value={genNotes}
+          onChange={e => setGenNotes(e.target.value)}
+          placeholder="Notas generales (urgencia, turno, etc.)"
+          rows={2}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gray-400"
+        />
+
+        {error && <p className="text-red-500 text-sm">{error}</p>}
+        {success && (
+          <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3 text-sm">
+            <CheckCircle className="w-4 h-4" /> Requisición enviada correctamente
+          </div>
+        )}
+
+        <button type="submit" disabled={saving}
+          className="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-semibold rounded-xl py-3 transition-colors">
+          <Send className="w-4 h-4" />
+          {saving ? 'Enviando...' : 'Enviar requisición'}
+        </button>
+      </form>
+
+      {/* Historial */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <h2 className="font-semibold text-gray-700 mb-4 flex items-center gap-2">
+          <Clock className="w-4 h-4" /> Mis requisiciones recientes
+        </h2>
+
+        {loadingHist ? (
+          <p className="text-gray-400 text-sm text-center py-4">Cargando...</p>
+        ) : history.length === 0 ? (
+          <p className="text-gray-400 text-sm text-center py-4">Sin requisiciones previas</p>
+        ) : (
+          <div className="space-y-2">
+            {history.map(req => {
+              const st = STATUS_LABEL[req.status] ?? STATUS_LABEL.pendiente
+              const isExp = expanded === req.id
+              return (
+                <div key={req.id} className="border border-gray-100 rounded-xl overflow-hidden">
+                  <button
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                    onClick={() => setExpanded(isExp ? null : req.id)}
+                  >
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${st.cls}`}>{st.label}</span>
+                    <span className="text-sm text-gray-700 flex-1">
+                      {req.requisition_items?.length ?? 0} insumo{req.requisition_items?.length !== 1 ? 's' : ''}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {new Date(req.created_at).toLocaleDateString('es-MX')}
+                    </span>
+                    {isExp ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                  </button>
+
+                  {isExp && (
+                    <div className="px-4 pb-3 border-t space-y-1 bg-gray-50">
+                      <div className="flex justify-end pt-2">
+                        <button onClick={() => printRequisition(req, activeBranch?.logo_url ?? null)}
+                          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 bg-white border border-gray-200 rounded-lg px-3 py-1.5 transition-colors">
+                          <Printer className="w-3.5 h-3.5" /> Imprimir / PDF
+                        </button>
+                      </div>
+                      {req.requisition_items?.map(ri => (
+                        <div key={ri.id} className="flex justify-between text-sm py-1">
+                          <span className="text-gray-700">{ri.ingredient_name || ri.ingredients?.name}</span>
+                          <span className="text-gray-500">{ri.quantity_requested} {ri.unit}</span>
+                        </div>
+                      ))}
+                      {req.notes && <p className="text-xs text-gray-500 pt-1 border-t">{req.notes}</p>}
+                      {req.status === 'rechazada' && req.review_note && (
+                        <div className="flex items-start gap-2 mt-2 bg-red-50 rounded-lg p-2">
+                          <XCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                          <p className="text-xs text-red-600">{req.review_note}</p>
+                        </div>
+                      )}
+                      {req.status === 'aprobada' && req.review_note && (
+                        <div className="flex items-start gap-2 mt-2 bg-green-50 rounded-lg p-2">
+                          <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                          <p className="text-xs text-green-600">{req.review_note}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
