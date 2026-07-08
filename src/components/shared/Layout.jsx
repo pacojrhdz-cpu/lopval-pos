@@ -4,21 +4,22 @@ import { useAuth } from '../../contexts/AuthContext'
 import {
   ShoppingCart, LayoutDashboard, Package, BookOpen,
   Warehouse, BarChart2, ClipboardList, LogOut, Menu,
-  ClipboardCheck, Scissors, MapPin, RefreshCw, Tag, Sliders
+  ClipboardCheck, Scissors, MapPin, RefreshCw,
+  Users, CalendarDays
 } from 'lucide-react'
 
 const adminLinks = [
-  { to: '/admin',                icon: LayoutDashboard, label: 'Dashboard',       exact: true },
-  { to: '/admin/ventas',         icon: ClipboardList,   label: 'Ventas'           },
-  { to: '/admin/estadisticas',   icon: BarChart2,       label: 'Estadísticas'     },
-  { to: '/admin/cortes',         icon: Scissors,        label: 'Cortes de Caja'   },
-  { to: '/admin/cuentas',        icon: BookOpen,        label: 'Cuentas'          },
-  { to: '/admin/productos',      icon: Package,         label: 'Productos'        },
-  { to: '/admin/categorias',     icon: Tag,             label: 'Categorías'       },
-  { to: '/admin/modificadores',  icon: Sliders,         label: 'Modificadores'    },
-  { to: '/admin/recetas',        icon: BookOpen,        label: 'Recetas'          },
-  { to: '/admin/inventario',     icon: Warehouse,       label: 'Inventario'       },
-  { to: '/admin/requisiciones',  icon: ClipboardCheck,  label: 'Requisiciones'    },
+  { to: '/admin',               icon: LayoutDashboard, label: 'Dashboard',      exact: true },
+  { to: '/admin/ventas',        icon: ClipboardList,   label: 'Ventas'          },
+  { to: '/admin/estadisticas',  icon: BarChart2,       label: 'Estadísticas'    },
+  { to: '/admin/cortes',        icon: Scissors,        label: 'Cortes de Caja'  },
+  { to: '/admin/cuentas',       icon: BookOpen,        label: 'Cuentas'         },
+  { to: '/admin/productos',     icon: Package,         label: 'Productos'       },
+  { to: '/admin/recetas',       icon: BookOpen,        label: 'Recetas'         },
+  { to: '/admin/inventario',    icon: Warehouse,       label: 'Inventario'      },
+  { to: '/admin/requisiciones', icon: ClipboardCheck,  label: 'Requisiciones'   },
+  { to: '/admin/empleados',    icon: Users,           label: 'Empleados'       },
+  { to: '/admin/asistencia',   icon: CalendarDays,    label: 'Asistencia'      },
 ]
 
 export default function Layout({ children }) {
@@ -68,21 +69,25 @@ export default function Layout({ children }) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
+          {/* POS — siempre visible */}
           <NavLink to="/pos" end className={navCls}>
             <ShoppingCart className="w-4 h-4 flex-shrink-0" />
             Punto de Venta
           </NavLink>
 
+          {/* Cuentas — visible para todos */}
           <NavLink to="/pos/cuentas" className={navCls}>
             <BookOpen className="w-4 h-4 flex-shrink-0" />
             Cuentas
           </NavLink>
 
+          {/* Requisición — visible para todos */}
           <NavLink to="/pos/requisicion" className={navCls}>
             <ClipboardCheck className="w-4 h-4 flex-shrink-0" />
             Requisición
           </NavLink>
 
+          {/* Links de admin */}
           {isAdmin && (
             <>
               <div className="px-3 pt-4 pb-1">
@@ -117,11 +122,14 @@ export default function Layout({ children }) {
         </div>
       </aside>
 
+      {/* Overlay móvil */}
       {open && (
         <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setOpen(false)} />
       )}
 
+      {/* Contenido principal */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top bar móvil */}
         <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b shadow-sm">
           <button onClick={() => setOpen(true)} className="text-gray-600">
             <Menu className="w-6 h-6" />
