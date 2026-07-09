@@ -130,6 +130,15 @@ export default function POS() {
       }))
     )
 
+    // Enviar comanda a cocina
+    await supabase.from('kitchen_tickets').insert({
+      branch_id:    activeBranch?.id ?? null,
+      ticket_label: 'POS',
+      items:        cart.map(i => ({ name: i.name, qty: i.qty })),
+      source:       'pos',
+      reference_id: sale.id,
+    })
+
     setLastSale({ ...sale, items: cart, change: changeGiven, cashier: profile?.name ?? 'Cajero', branchName: activeBranch?.name })
     clearCart()
     setShowPayment(false)
