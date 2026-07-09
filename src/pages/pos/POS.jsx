@@ -73,7 +73,6 @@ export default function POS() {
     const { data: assignments } = await supabase
       .from('product_modifier_group_assignments')
       .select('product_id')
-      .eq('active', true)
 
     const hasMods = new Set((assignments ?? []).map(a => a.product_id))
     setProducts((prods ?? []).map(p => ({ ...p, hasMods: hasMods.has(p.id) })))
@@ -432,7 +431,6 @@ function ModifierModal({ product, onClose, onConfirm }) {
           .from('product_modifier_group_assignments')
           .select('sort_order, modifier_groups(*, modifiers(*))')
           .eq('product_id', product.id)
-          .eq('active', true)
           .order('sort_order'),
         supabase
           .from('combo_items')
