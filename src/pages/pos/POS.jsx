@@ -6,7 +6,7 @@ import { mxn } from '../../utils/format'
 import {
   ShoppingCart, Search, Plus, Minus, Trash2, Tag,
   CreditCard, Banknote, Smartphone, X, CheckCircle, Clock,
-  Printer, BookOpen, Scissors
+  Printer, BookOpen, Scissors, ChefHat
 } from 'lucide-react'
 
 const CAT_COLORS = {
@@ -34,6 +34,8 @@ export default function POS() {
   const [cashRegister,     setCashRegister]     = useState(null)
   const [checkingRegister, setCheckingRegister] = useState(true)
   const [showCorte,        setShowCorte]        = useState(false)
+  const [sendingCmd,       setSendingCmd]       = useState(false)
+  const [cmdSent,          setCmdSent]          = useState(false)
 
   useEffect(() => {
     fetchCategories()
@@ -97,6 +99,21 @@ export default function POS() {
   const subtotal    = cart.reduce((s, i) => s + i.price * i.qty, 0)
   const discountAmt = Math.min(parseFloat(discount) || 0, subtotal)
   const total       = subtotal - discountAmt
+
+  async function sendComanda() {
+    if (cart.length === 0) return
+    setSendingCmd(true)
+    const { error } = await supabase.from('kitchen_tickets').insert({
+      branch_id:    activeBranch?.id ?? null,
+      ticket_label: 'POS',
+      items:        cart.map(i => ({ name: i.name, qty: i.qty })),
+      source:       'pos',
+    })
+    setSendingCmd(false)
+    if (error) { alert('Error comanda: ' + error.message); return }
+    setCmdSent(true)
+    setTimeout(() => setCmdSent(false), 3000)
+  }
 
   async function completeSale(paymentMethod, platformName, cashReceived) {
     const changeGiven = paymentMethod === 'efectivo' ? (cashReceived - total) : 0
@@ -339,6 +356,17 @@ export default function POS() {
             <div className="flex justify-between font-bold text-lg text-gray-900 border-t pt-2">
               <span>Total</span><span>{mxn(total)}</span>
             </div>
+            <button
+              onClick={sendComanda}
+              disabled={sendingCmd}
+              className={`w-full font-medium rounded-xl py-3 text-sm transition-colors flex items-center justify-center gap-2
+                ${cmdSent
+                  ? 'bg-green-100 text-green-700 border border-green-200'
+                  : 'bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 disabled:opacity-50'}`}
+            >
+              <ChefHat className="w-4 h-4" />
+              {cmdSent ? '¡Comanda enviada!' : sendingCmd ? 'Enviando...' : 'Mandar comanda a cocina'}
+            </button>
             <button
               onClick={() => setShowPayment(true)}
               className="w-full bg-gray-900 hover:bg-gray-800 active:bg-black text-white font-bold rounded-xl py-3.5 transition-colors text-base"
