@@ -69,21 +69,14 @@ export default function POS() {
     if (activeBranch?.id) q = q.eq('branch_id', activeBranch.id)
     const { data: prods } = await q
 
-    // Cargar grupos de modificadores asignados a cada producto
+    // Solo obtener qué productos tienen modificadores (carga lazy en el modal)
     const { data: assignments } = await supabase
       .from('product_modifier_group_assignments')
-      .select('product_id, sort_order, modifier_groups(id, name, min_select, max_select, modifiers(id, name, price, active))')
-      .order('sort_order')
+      .select('product_id')
+      .eq('active', true)
 
-    // Indexar por producto
-    const modMap = {}
-    for (const a of assignments ?? []) {
-      if (!a.modifier_groups) continue
-      if (!modMap[a.product_id]) modMap[a.product_id] = []
-      modMap[a.product_id].push(a.modifier_groups)
-    }
-
-    setProducts((prods ?? []).map(p => ({ ...p, modifier_groups: modMap[p.id] ?? [] })))
+    const hasMods = new Set((assignments ?? []).map(a => a.product_id))
+    setProducts((prods ?? []).map(p => ({ ...p, hasMods: hasMods.has(p.id) })))
   }
   async function fetchRecentSales() {
     const { data } = await supabase.from('sales').select('id,created_at,total,payment_method').order('created_at', { ascending: false }).limit(5)
@@ -97,20 +90,17 @@ export default function POS() {
   })
 
   const addToCart = useCallback((product, selectedMods = []) => {
-    if (product.modifier_groups?.length > 0 && selectedMods.length === 0) {
-      // Mostrar modal de modificadores
+    if (product.hasMods && selectedMods.length === 0) {
       setPendingProduct(product)
       return
     }
-    const modPrice  = selectedMods.reduce((s, m) => s + Number(m.price), 0)
-    const finalPrice = Number(product.price) + modPrice
-    const cartKey   = product.id + (selectedMods.length ? '|' + selectedMods.map(m => m.id).join(',') : '')
+    const extraPrice = selectedMods.reduce((s, m) => s + Number(m.price_extra ?? 0), 0)
+    const finalPrice = Number(product.price) + extraPrice
+    const cartKey    = product.id + (selectedMods.length ? '|' + selectedMods.map(m => m.id).sort().join(',') : '')
     setCart(prev => {
       const idx = prev.findIndex(i => i.cartKey === cartKey)
       if (idx >= 0) {
-        const next = [...prev]
-        next[idx] = { ...next[idx], qty: next[idx].qty + 1 }
-        return next
+        const next = [...prev]; next[idx] = { ...next[idx], qty: next[idx].qty + 1 }; return next
       }
       return [...prev, { ...product, cartKey, price: finalPrice, mods: selectedMods, qty: 1 }]
     })
@@ -411,7 +401,7 @@ export default function POS() {
       {pendingProduct && (
         <ModifierModal
           product={pendingProduct}
-          onConfirm={mods => { setPendingProduct(null); addToCart(pendingProduct, mods) }}
+          onConfirm={mods => { addToCart(pendingProduct, mods); setPendingProduct(null) }}
           onClose={() => setPendingProduct(null)}
         />
       )}
@@ -429,108 +419,156 @@ export default function POS() {
 }
 
 // ─── Modifier Modal ───────────────────────────────────────────
-function ModifierModal({ product, onConfirm, onClose }) {
-  const groups = product.modifier_groups ?? []
-  const [selected, setSelected] = useState({}) // { groupId: [modifierId, ...] }
+function ModifierModal({ product, onClose, onConfirm }) {
+  const [groups,     setGroups]     = useState([])
+  const [selected,   setSelected]   = useState({}) // groupId → Set de modifier ids
+  const [comboItems, setComboItems] = useState([])
+  const [loading,    setLoading]    = useState(true)
+
+  useEffect(() => {
+    async function load() {
+      const [{ data: assignments }, { data: cData }] = await Promise.all([
+        supabase
+          .from('product_modifier_group_assignments')
+          .select('sort_order, modifier_groups(*, modifiers(*))')
+          .eq('product_id', product.id)
+          .eq('active', true)
+          .order('sort_order'),
+        supabase
+          .from('combo_items')
+          .select('*, products(name)')
+          .eq('combo_product_id', product.id),
+      ])
+      const grps = (assignments ?? []).map(a => a.modifier_groups).filter(Boolean)
+      setGroups(grps)
+      setComboItems(cData ?? [])
+      setLoading(false)
+    }
+    load()
+  }, [product.id])
 
   function toggle(group, mod) {
     setSelected(prev => {
-      const cur = prev[group.id] ?? []
-      const has = cur.includes(mod.id)
-      let next
-      if (group.max_select === 1) {
-        // Radio — solo uno por grupo
-        next = has ? [] : [mod.id]
+      const cur = new Set(prev[group.id] ?? [])
+      if (group.multi_select) {
+        cur.has(mod.id) ? cur.delete(mod.id) : cur.add(mod.id)
       } else {
-        if (has) {
-          next = cur.filter(id => id !== mod.id)
-        } else {
-          if (group.max_select && cur.length >= group.max_select) return prev
-          next = [...cur, mod.id]
-        }
+        cur.clear(); cur.add(mod.id)
       }
-      return { ...prev, [group.id]: next }
+      return { ...prev, [group.id]: cur }
     })
   }
 
-  const allMods    = groups.flatMap(g => g.modifiers ?? [])
-  const selectedIds = Object.values(selected).flat()
-  const chosenMods  = allMods.filter(m => selectedIds.includes(m.id))
-  const extraPrice  = chosenMods.reduce((s, m) => s + Number(m.price), 0)
-  const finalPrice  = Number(product.price) + extraPrice
+  function getModObj(id) {
+    for (const g of groups) {
+      const m = g.modifiers?.find(x => x.id === id)
+      if (m) return m
+    }
+    return null
+  }
 
-  const canConfirm = groups.every(g => {
-    const cnt = (selected[g.id] ?? []).length
-    return cnt >= (g.min_select ?? 0)
-  })
+  function handleConfirm() {
+    const allMods = []
+    for (const g of groups) {
+      const selIds = selected[g.id] ?? new Set()
+      if (g.required && selIds.size === 0) {
+        alert(`Debes elegir una opción en "${g.name}"`)
+        return
+      }
+      for (const id of selIds) {
+        const mod = getModObj(id)
+        if (mod) allMods.push(mod)
+      }
+    }
+    onConfirm(allMods)
+  }
+
+  const extraTotal = Object.values(selected)
+    .flatMap(s => [...s])
+    .reduce((sum, id) => sum + Number(getModObj(id)?.price_extra ?? 0), 0)
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b">
           <div>
-            <h2 className="font-bold text-gray-900">{product.name}</h2>
-            <p className="text-sm text-gray-500">Personaliza tu orden</p>
+            <h2 className="font-bold text-gray-800">{product.name}</h2>
+            <p className="text-sm text-gray-500 mt-0.5">Personaliza tu pedido</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
         </div>
 
-        {/* Groups */}
-        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-5">
-          {groups.map(group => {
-            const activeMods = (group.modifiers ?? []).filter(m => m.active !== false)
-            return (
-              <div key={group.id}>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold text-gray-800 text-sm">{group.name}</p>
-                  <span className="text-xs text-gray-400">
-                    {group.min_select > 0 ? `Mín ${group.min_select}` : 'Opcional'}
-                    {group.max_select ? ` · Máx ${group.max_select}` : ''}
-                  </span>
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {loading ? (
+            <p className="text-center text-gray-400 py-4">Cargando opciones...</p>
+          ) : (
+            <>
+              {comboItems.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">📦 Este combo incluye</p>
+                  <div className="bg-gray-50 rounded-xl p-3 space-y-1">
+                    {comboItems.map(ci => (
+                      <div key={ci.id} className="flex justify-between text-sm text-gray-700">
+                        <span>{ci.products?.name}</span>
+                        <span className="text-gray-400">× {ci.quantity}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  {activeMods.map(mod => {
-                    const isSelected = (selected[group.id] ?? []).includes(mod.id)
-                    return (
-                      <button
-                        key={mod.id}
-                        onClick={() => toggle(group, mod)}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm transition-colors ${
-                          isSelected
-                            ? 'border-gray-800 bg-gray-900 text-white'
-                            : 'border-gray-200 hover:border-gray-400 text-gray-700'
-                        }`}
-                      >
-                        <span>{mod.name}</span>
-                        <span className={isSelected ? 'text-gray-300' : 'text-gray-500'}>
-                          {Number(mod.price) > 0 ? `+${mxn(mod.price)}` : 'Incluido'}
-                        </span>
-                      </button>
-                    )
-                  })}
+              )}
+              {groups.map(g => (
+                <div key={g.id}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className="text-sm font-semibold text-gray-800">{g.name}</p>
+                    {g.required
+                      ? <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">Obligatorio</span>
+                      : <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">Opcional</span>}
+                    {g.multi_select && <span className="text-xs text-gray-400">· Varios</span>}
+                  </div>
+                  <div className="space-y-2">
+                    {(g.modifiers ?? []).filter(m => m.active).sort((a, b) => a.sort_order - b.sort_order).map(mod => {
+                      const sel = selected[g.id]?.has(mod.id)
+                      return (
+                        <button key={mod.id} onClick={() => toggle(g, mod)}
+                          className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border-2 text-sm transition-all ${
+                            sel ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300'
+                          }`}>
+                          <span className="font-medium text-gray-800">{mod.name}</span>
+                          <div className="flex items-center gap-2">
+                            {Number(mod.price_extra) > 0
+                              ? <span className="text-green-700 font-medium">+{mxn(mod.price_extra)}</span>
+                              : <span className="text-gray-400">Gratis</span>}
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${sel ? 'bg-gray-900 border-gray-900' : 'border-gray-300'}`}>
+                              {sel && <div className="w-2 h-2 bg-white rounded-full" />}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            )
-          })}
+              ))}
+            </>
+          )}
         </div>
 
-        {/* Footer */}
-        <div className="px-5 pb-5 pt-3 border-t space-y-2">
-          <div className="flex justify-between text-sm text-gray-600">
-            <span>Precio base</span><span>{mxn(product.price)}</span>
+        <div className="p-5 border-t space-y-3">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Precio base</span>
+            <span className="font-medium text-gray-800">{mxn(product.price)}</span>
           </div>
-          {extraPrice > 0 && (
-            <div className="flex justify-between text-sm text-amber-600">
-              <span>Extras</span><span>+{mxn(extraPrice)}</span>
+          {extraTotal > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Extras</span>
+              <span className="font-medium text-green-700">+{mxn(extraTotal)}</span>
             </div>
           )}
-          <button
-            onClick={() => onConfirm(chosenMods)}
-            disabled={!canConfirm}
-            className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-40 text-white font-bold rounded-xl py-3.5 transition-colors"
-          >
-            Agregar — {mxn(finalPrice)}
+          <div className="flex justify-between font-bold text-gray-900 border-t pt-2">
+            <span>Total</span><span>{mxn(product.price + extraTotal)}</span>
+          </div>
+          <button onClick={handleConfirm}
+            className="w-full bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl py-3 transition-colors">
+            Agregar al carrito
           </button>
         </div>
       </div>
