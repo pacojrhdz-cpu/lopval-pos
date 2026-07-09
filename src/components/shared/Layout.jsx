@@ -15,6 +15,7 @@ const adminLinks = [
   { to: '/admin/cortes',        icon: Scissors,        label: 'Cortes de Caja'  },
   { to: '/admin/cuentas',       icon: BookOpen,        label: 'Cuentas'         },
   { to: '/admin/productos',     icon: Package,         label: 'Productos'       },
+  { to: '/admin/modificadores', icon: Package,         label: 'Modificadores'   },
   { to: '/admin/recetas',       icon: BookOpen,        label: 'Recetas'         },
   { to: '/admin/inventario',    icon: Warehouse,       label: 'Inventario'      },
   { to: '/admin/requisiciones', icon: ClipboardCheck,  label: 'Requisiciones'   },
