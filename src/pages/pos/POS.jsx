@@ -36,10 +36,11 @@ export default function POS() {
   const [showCorte,        setShowCorte]        = useState(false)
   const [sendingCmd,       setSendingCmd]       = useState(false)
   const [cmdSent,          setCmdSent]          = useState(false)
+  const [pendingProduct,   setPendingProduct]   = useState(null)  // producto esperando selección de modificadores
 
   useEffect(() => {
     fetchCategories()
-    fetchProducts()
+    fetchProductsWithMods()
     fetchRecentSales()
     if (user) fetchCashRegister()
   }, [user])
@@ -63,11 +64,26 @@ export default function POS() {
     const { data } = await q
     setCategories(data ?? [])
   }
-  async function fetchProducts() {
+  async function fetchProductsWithMods() {
     let q = supabase.from('products').select('*, categories(name,icon,color)').eq('active', true).order('name')
     if (activeBranch?.id) q = q.eq('branch_id', activeBranch.id)
-    const { data } = await q
-    setProducts(data ?? [])
+    const { data: prods } = await q
+
+    // Cargar grupos de modificadores asignados a cada producto
+    const { data: assignments } = await supabase
+      .from('product_modifier_group_assignments')
+      .select('product_id, sort_order, modifier_groups(id, name, min_select, max_select, modifiers(id, name, price, active))')
+      .order('sort_order')
+
+    // Indexar por producto
+    const modMap = {}
+    for (const a of assignments ?? []) {
+      if (!a.modifier_groups) continue
+      if (!modMap[a.product_id]) modMap[a.product_id] = []
+      modMap[a.product_id].push(a.modifier_groups)
+    }
+
+    setProducts((prods ?? []).map(p => ({ ...p, modifier_groups: modMap[p.id] ?? [] })))
   }
   async function fetchRecentSales() {
     const { data } = await supabase.from('sales').select('id,created_at,total,payment_method').order('created_at', { ascending: false }).limit(5)
@@ -80,20 +96,28 @@ export default function POS() {
     return matchCat && matchSearch
   })
 
-  const addToCart = useCallback((product) => {
+  const addToCart = useCallback((product, selectedMods = []) => {
+    if (product.modifier_groups?.length > 0 && selectedMods.length === 0) {
+      // Mostrar modal de modificadores
+      setPendingProduct(product)
+      return
+    }
+    const modPrice  = selectedMods.reduce((s, m) => s + Number(m.price), 0)
+    const finalPrice = Number(product.price) + modPrice
+    const cartKey   = product.id + (selectedMods.length ? '|' + selectedMods.map(m => m.id).join(',') : '')
     setCart(prev => {
-      const idx = prev.findIndex(i => i.id === product.id)
+      const idx = prev.findIndex(i => i.cartKey === cartKey)
       if (idx >= 0) {
         const next = [...prev]
         next[idx] = { ...next[idx], qty: next[idx].qty + 1 }
         return next
       }
-      return [...prev, { ...product, qty: 1 }]
+      return [...prev, { ...product, cartKey, price: finalPrice, mods: selectedMods, qty: 1 }]
     })
   }, [])
 
-  const updateQty  = (id, delta) => setCart(prev => prev.map(i => i.id === id ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0))
-  const removeItem = (id)        => setCart(prev => prev.filter(i => i.id !== id))
+  const updateQty  = (cartKey, delta) => setCart(prev => prev.map(i => i.cartKey === cartKey ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0))
+  const removeItem = (cartKey)        => setCart(prev => prev.filter(i => i.cartKey !== cartKey))
   const clearCart  = ()          => { setCart([]); setDiscount(''); setDiscReason('') }
 
   const subtotal    = cart.reduce((s, i) => s + i.price * i.qty, 0)
@@ -140,7 +164,9 @@ export default function POS() {
       cart.map(i => ({
         sale_id:      sale.id,
         product_id:   i.id,
-        product_name: i.name,
+        product_name: i.mods?.length
+          ? `${i.name} (${i.mods.map(m => m.name).join(', ')})`
+          : i.name,
         quantity:     i.qty,
         unit_price:   i.price,
         subtotal:     i.price * i.qty,
@@ -300,20 +326,25 @@ export default function POS() {
           ) : (
             <div className="p-3 space-y-2">
               {cart.map(item => (
-                <div key={item.id} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2">
+                <div key={item.cartKey} className="flex items-start gap-2 bg-gray-50 rounded-xl p-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                    {item.mods?.length > 0 && (
+                      <p className="text-xs text-amber-600 truncate">
+                        + {item.mods.map(m => m.name).join(', ')}
+                      </p>
+                    )}
                     <p className="text-xs text-gray-500">{mxn(item.price)} c/u</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => updateQty(item.id, -1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
+                    <button onClick={() => updateQty(item.cartKey, -1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
                       <Minus className="w-3 h-3" />
                     </button>
                     <span className="w-6 text-center text-sm font-bold">{item.qty}</span>
-                    <button onClick={() => updateQty(item.id, 1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
+                    <button onClick={() => updateQty(item.cartKey, 1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
                       <Plus className="w-3 h-3" />
                     </button>
-                    <button onClick={() => removeItem(item.id)} className="w-7 h-7 rounded-full hover:bg-red-100 flex items-center justify-center text-gray-400 hover:text-red-500 ml-1 transition-colors">
+                    <button onClick={() => removeItem(item.cartKey)} className="w-7 h-7 rounded-full hover:bg-red-100 flex items-center justify-center text-gray-400 hover:text-red-500 ml-1 transition-colors">
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
@@ -377,6 +408,13 @@ export default function POS() {
         )}
       </div>
 
+      {pendingProduct && (
+        <ModifierModal
+          product={pendingProduct}
+          onConfirm={mods => { setPendingProduct(null); addToCart(pendingProduct, mods) }}
+          onClose={() => setPendingProduct(null)}
+        />
+      )}
       {showPayment && <PaymentModal total={total} onClose={() => setShowPayment(false)} onComplete={completeSale} />}
       {lastSale    && <SuccessModal sale={lastSale} onClose={() => setLastSale(null)} />}
       {showCorte   && (
@@ -386,6 +424,116 @@ export default function POS() {
           onClosed={() => { setCashRegister(null); setCheckingRegister(false); setShowCorte(false) }}
         />
       )}
+    </div>
+  )
+}
+
+// ─── Modifier Modal ───────────────────────────────────────────
+function ModifierModal({ product, onConfirm, onClose }) {
+  const groups = product.modifier_groups ?? []
+  const [selected, setSelected] = useState({}) // { groupId: [modifierId, ...] }
+
+  function toggle(group, mod) {
+    setSelected(prev => {
+      const cur = prev[group.id] ?? []
+      const has = cur.includes(mod.id)
+      let next
+      if (group.max_select === 1) {
+        // Radio — solo uno por grupo
+        next = has ? [] : [mod.id]
+      } else {
+        if (has) {
+          next = cur.filter(id => id !== mod.id)
+        } else {
+          if (group.max_select && cur.length >= group.max_select) return prev
+          next = [...cur, mod.id]
+        }
+      }
+      return { ...prev, [group.id]: next }
+    })
+  }
+
+  const allMods    = groups.flatMap(g => g.modifiers ?? [])
+  const selectedIds = Object.values(selected).flat()
+  const chosenMods  = allMods.filter(m => selectedIds.includes(m.id))
+  const extraPrice  = chosenMods.reduce((s, m) => s + Number(m.price), 0)
+  const finalPrice  = Number(product.price) + extraPrice
+
+  const canConfirm = groups.every(g => {
+    const cnt = (selected[g.id] ?? []).length
+    return cnt >= (g.min_select ?? 0)
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b">
+          <div>
+            <h2 className="font-bold text-gray-900">{product.name}</h2>
+            <p className="text-sm text-gray-500">Personaliza tu orden</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
+        </div>
+
+        {/* Groups */}
+        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-5">
+          {groups.map(group => {
+            const activeMods = (group.modifiers ?? []).filter(m => m.active !== false)
+            return (
+              <div key={group.id}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold text-gray-800 text-sm">{group.name}</p>
+                  <span className="text-xs text-gray-400">
+                    {group.min_select > 0 ? `Mín ${group.min_select}` : 'Opcional'}
+                    {group.max_select ? ` · Máx ${group.max_select}` : ''}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {activeMods.map(mod => {
+                    const isSelected = (selected[group.id] ?? []).includes(mod.id)
+                    return (
+                      <button
+                        key={mod.id}
+                        onClick={() => toggle(group, mod)}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm transition-colors ${
+                          isSelected
+                            ? 'border-gray-800 bg-gray-900 text-white'
+                            : 'border-gray-200 hover:border-gray-400 text-gray-700'
+                        }`}
+                      >
+                        <span>{mod.name}</span>
+                        <span className={isSelected ? 'text-gray-300' : 'text-gray-500'}>
+                          {Number(mod.price) > 0 ? `+${mxn(mod.price)}` : 'Incluido'}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 pt-3 border-t space-y-2">
+          <div className="flex justify-between text-sm text-gray-600">
+            <span>Precio base</span><span>{mxn(product.price)}</span>
+          </div>
+          {extraPrice > 0 && (
+            <div className="flex justify-between text-sm text-amber-600">
+              <span>Extras</span><span>+{mxn(extraPrice)}</span>
+            </div>
+          )}
+          <button
+            onClick={() => onConfirm(chosenMods)}
+            disabled={!canConfirm}
+            className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-40 text-white font-bold rounded-xl py-3.5 transition-colors"
+          >
+            Agregar — {mxn(finalPrice)}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
