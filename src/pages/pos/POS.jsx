@@ -441,13 +441,28 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
 
   async function fetchSummary() {
     setLoading(true)
-    // Incluye TODAS las ventas de la sucursal desde que se abrió caja:
-    // ventas directas del POS + cuentas cobradas (que no tienen cash_register_id)
+
+    // Punto de corte: desde el último registro CERRADO de esta sucursal.
+    // Así ambos admins ven SIEMPRE lo mismo: todas las ventas de la sucursal
+    // desde el último corte, sin importar qué usuario abrió la caja.
+    let sinceDate = cashRegister.opening_at  // fallback: apertura de este registro
+
+    if (cashRegister.branch_id) {
+      const { data: lastClosed } = await supabase
+        .from('cash_registers')
+        .select('closing_at')
+        .eq('branch_id', cashRegister.branch_id)
+        .eq('status', 'closed')
+        .order('closing_at', { ascending: false })
+        .limit(1)
+      if (lastClosed?.[0]?.closing_at) sinceDate = lastClosed[0].closing_at
+    }
+
     const { data } = await supabase
       .from('sales')
       .select('total, payment_method, payments')
       .eq('branch_id', cashRegister.branch_id)
-      .gte('created_at', cashRegister.opening_at)
+      .gte('created_at', sinceDate)
       .eq('status', 'completed')
 
     const s = (data ?? []).reduce((acc, sale) => {
