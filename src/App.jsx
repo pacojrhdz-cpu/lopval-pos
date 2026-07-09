@@ -9,6 +9,7 @@ import Cuentas           from './pages/pos/Cuentas'
 import CuentaDetalle     from './pages/pos/CuentaDetalle'
 import Dashboard         from './pages/admin/Dashboard'
 import Products          from './pages/admin/Products'
+import Modifiers         from './pages/admin/Modifiers'
 import Recipes           from './pages/admin/Recipes'
 import Inventory         from './pages/admin/Inventory'
 import Statistics        from './pages/admin/Statistics'
@@ -83,6 +84,7 @@ function AppRoutes() {
       <Route path="/admin"                   element={<A><Dashboard /></A>} />
       <Route path="/admin/ventas"            element={<A><SalesHistory /></A>} />
       <Route path="/admin/productos"         element={<A><Products /></A>} />
+      <Route path="/admin/modificadores"     element={<A><Modifiers /></A>} />
       <Route path="/admin/recetas"           element={<A><Recipes /></A>} />
       <Route path="/admin/inventario"        element={<A><Inventory /></A>} />
       <Route path="/admin/estadisticas"      element={<A><Statistics /></A>} />
