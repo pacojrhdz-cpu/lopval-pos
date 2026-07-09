@@ -430,6 +430,7 @@ function AperturaOverlay({ userId, cashierName, branchId, branchName, onOpen }) 
 
 // ─── Corte de Caja ────────────────────────────────────────────
 function CorteModal({ cashRegister, onClose, onClosed }) {
+  const { activeBranch } = useAuth()
   const [summary,    setSummary]    = useState(null)
   const [closingAmt, setClosingAmt] = useState('')
   const [notes,      setNotes]      = useState('')
@@ -442,16 +443,17 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
   async function fetchSummary() {
     setLoading(true)
 
-    // Punto de corte: desde el último registro CERRADO de esta sucursal.
-    // Así ambos admins ven SIEMPRE lo mismo: todas las ventas de la sucursal
-    // desde el último corte, sin importar qué usuario abrió la caja.
+    // Usar activeBranch del contexto como fuente principal de branch_id.
+    // cashRegister.branch_id puede ser null en registros viejos, por eso
+    // activeBranch es el fallback seguro — ambos admins siempre ven lo mismo.
+    const branchId = activeBranch?.id ?? cashRegister.branch_id
     let sinceDate = cashRegister.opening_at  // fallback: apertura de este registro
 
-    if (cashRegister.branch_id) {
+    if (branchId) {
       const { data: lastClosed } = await supabase
         .from('cash_registers')
         .select('closing_at')
-        .eq('branch_id', cashRegister.branch_id)
+        .eq('branch_id', branchId)
         .eq('status', 'closed')
         .order('closing_at', { ascending: false })
         .limit(1)
@@ -461,7 +463,7 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
     const { data } = await supabase
       .from('sales')
       .select('total, payment_method, payments')
-      .eq('branch_id', cashRegister.branch_id)
+      .eq('branch_id', branchId)
       .gte('created_at', sinceDate)
       .eq('status', 'completed')
 
@@ -493,6 +495,7 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
     setSaving(true)
     const expectedCash = Number(cashRegister.opening_amount) + (summary?.efectivo ?? 0)
     const difference   = amt - expectedCash
+    const branchId = activeBranch?.id ?? cashRegister.branch_id
     await supabase.from('cash_registers').update({
       status:         'closed',
       closing_amount: amt,
@@ -502,7 +505,9 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
       total_card:     summary?.tarjeta   ?? 0,
       total_platform: summary?.plataforma ?? 0,
       difference,
-      notes: notes || null,
+      notes:          notes || null,
+      // Parchar branch_id si quedó null en apertura (registros viejos)
+      ...(branchId && !cashRegister.branch_id ? { branch_id: branchId } : {}),
     }).eq('id', cashRegister.id)
     onClosed()
   }
