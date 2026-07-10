@@ -116,9 +116,10 @@ export default function POS() {
   async function sendComanda() {
     if (cart.length === 0) return
     setSendingCmd(true)
+    const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
     const { error } = await supabase.from('kitchen_tickets').insert({
       branch_id:    activeBranch?.id ?? null,
-      ticket_label: 'POS',
+      ticket_label: `Mostrador · ${hora}`,
       items:        cart.map(i => ({
         name:  i.name,
         qty:   i.qty,
@@ -168,9 +169,10 @@ export default function POS() {
     )
 
     // Enviar comanda a cocina
+    const horaVenta = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
     await supabase.from('kitchen_tickets').insert({
       branch_id:    activeBranch?.id ?? null,
-      ticket_label: 'POS',
+      ticket_label: `Mostrador · ${horaVenta}`,
       items:        cart.map(i => ({
         name:  i.name,
         qty:   i.qty,
