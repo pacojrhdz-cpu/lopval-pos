@@ -88,8 +88,8 @@ export default function POS() {
     return matchCat && matchSearch
   })
 
-  const addToCart = useCallback((product, selectedMods = []) => {
-    if (product.hasMods && selectedMods.length === 0) {
+  const addToCart = useCallback((product, selectedMods = [], fromModal = false) => {
+    if (product.hasMods && selectedMods.length === 0 && !fromModal) {
       setPendingProduct(product)
       return
     }
@@ -409,7 +409,7 @@ export default function POS() {
       {pendingProduct && (
         <ModifierModal
           product={pendingProduct}
-          onConfirm={mods => { addToCart(pendingProduct, mods); setPendingProduct(null) }}
+          onConfirm={mods => { addToCart(pendingProduct, mods, true); setPendingProduct(null) }}
           onClose={() => setPendingProduct(null)}
         />
       )}
