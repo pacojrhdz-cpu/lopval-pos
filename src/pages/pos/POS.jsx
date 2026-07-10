@@ -119,7 +119,11 @@ export default function POS() {
     const { error } = await supabase.from('kitchen_tickets').insert({
       branch_id:    activeBranch?.id ?? null,
       ticket_label: 'POS',
-      items:        cart.map(i => ({ name: i.name, qty: i.qty })),
+      items:        cart.map(i => ({
+        name:  i.name,
+        qty:   i.qty,
+        notes: i.mods?.length ? i.mods.map(m => m.name).join(', ') : undefined,
+      })),
       source:       'pos',
     })
     setSendingCmd(false)
@@ -128,7 +132,7 @@ export default function POS() {
     setTimeout(() => setCmdSent(false), 3000)
   }
 
-  async function completeSale(paymentMethod, platformName, cashReceived) {
+  async function completeSale(paymentMethod, platformName, cashReceived, payments = null) {
     const changeGiven = paymentMethod === 'efectivo' ? (cashReceived - total) : 0
     const { data: sale, error } = await supabase.from('sales').insert({
       cashier_id:       user?.id,
@@ -144,6 +148,7 @@ export default function POS() {
       platform_name:    platformName || null,
       cash_received:    paymentMethod === 'efectivo' ? cashReceived : null,
       change_given:     paymentMethod === 'efectivo' ? changeGiven  : null,
+      payments:         payments ?? null,
       status:           'completed',
     }).select().single()
 
@@ -166,7 +171,11 @@ export default function POS() {
     await supabase.from('kitchen_tickets').insert({
       branch_id:    activeBranch?.id ?? null,
       ticket_label: 'POS',
-      items:        cart.map(i => ({ name: i.name, qty: i.qty })),
+      items:        cart.map(i => ({
+        name:  i.name,
+        qty:   i.qty,
+        notes: i.mods?.length ? i.mods.map(m => m.name).join(', ') : undefined,
+      })),
       source:       'pos',
       reference_id: sale.id,
     })
@@ -694,17 +703,19 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
       // Pagos mixtos: sumar cada método por su monto real
       if (sale.payment_method === 'mixto' && Array.isArray(sale.payments)) {
         for (const p of sale.payments) {
-          if (p.method === 'efectivo')   acc.efectivo   += Number(p.amount)
-          if (p.method === 'tarjeta')    acc.tarjeta    += Number(p.amount)
-          if (p.method === 'plataforma') acc.plataforma += Number(p.amount)
+          if (p.method === 'efectivo')      acc.efectivo      += Number(p.amount)
+          if (p.method === 'tarjeta')       acc.tarjeta       += Number(p.amount)
+          if (p.method === 'transferencia') acc.transferencia += Number(p.amount)
+          if (p.method === 'plataforma')    acc.plataforma    += Number(p.amount)
         }
       } else {
-        if (sale.payment_method === 'efectivo')   acc.efectivo   += Number(sale.total)
-        if (sale.payment_method === 'tarjeta')    acc.tarjeta    += Number(sale.total)
-        if (sale.payment_method === 'plataforma') acc.plataforma += Number(sale.total)
+        if (sale.payment_method === 'efectivo')      acc.efectivo      += Number(sale.total)
+        if (sale.payment_method === 'tarjeta')       acc.tarjeta       += Number(sale.total)
+        if (sale.payment_method === 'transferencia') acc.transferencia += Number(sale.total)
+        if (sale.payment_method === 'plataforma')    acc.plataforma    += Number(sale.total)
       }
       return acc
-    }, { total: 0, count: 0, efectivo: 0, tarjeta: 0, plataforma: 0 })
+    }, { total: 0, count: 0, efectivo: 0, tarjeta: 0, transferencia: 0, plataforma: 0 })
 
     setSummary(s)
     setLoading(false)
@@ -754,9 +765,10 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
             <div className="bg-gray-50 rounded-xl p-4 space-y-2">
               <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-2">Resumen del turno</p>
               <Row label="Apertura de caja"    value={mxn(cashRegister.opening_amount)} />
-              <Row label="Ventas en efectivo"  value={mxn(summary.efectivo)}  cls="text-green-700" />
-              <Row label="Ventas con tarjeta"  value={mxn(summary.tarjeta)}   cls="text-blue-700" />
-              <Row label="Plataformas"         value={mxn(summary.plataforma)} cls="text-purple-700" />
+              <Row label="Efectivo"        value={mxn(summary.efectivo)}      cls="text-green-700" />
+              <Row label="Tarjeta"         value={mxn(summary.tarjeta)}       cls="text-blue-700" />
+              <Row label="Transferencia"   value={mxn(summary.transferencia)} cls="text-cyan-700" />
+              <Row label="Plataformas"     value={mxn(summary.plataforma)}    cls="text-purple-700" />
               <div className="border-t pt-2">
                 <Row label={`Total ventas (${summary.count} órdenes)`} value={mxn(summary.total)} bold />
               </div>
@@ -819,48 +831,81 @@ function Row({ label, value, cls = 'text-gray-800', bold = false }) {
 
 // ─── Modal de Pago ────────────────────────────────────────────
 function PaymentModal({ total, onClose, onComplete }) {
-  const [method,   setMethod]   = useState('efectivo')
-  const [platform, setPlatform] = useState('')
-  const [cash,     setCash]     = useState('')
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
+  const [method,      setMethod]      = useState('efectivo')
+  const [platform,    setPlatform]    = useState('')
+  const [cash,        setCash]        = useState('')
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState('')
+  // Pago mixto
+  const [mixEfectivo,      setMixEfectivo]      = useState('')
+  const [mixTarjeta,       setMixTarjeta]        = useState('')
+  const [mixTransferencia, setMixTransferencia]  = useState('')
+  const [mixPlataforma,    setMixPlataforma]     = useState('')
+  const [mixPlatName,      setMixPlatName]       = useState('')
 
   const cashNum   = parseFloat(cash) || 0
   const change    = cashNum - total
   const validCash = method !== 'efectivo' || cashNum >= total
 
+  // Mixto: suma de partes
+  const mixTotal = (parseFloat(mixEfectivo) || 0) + (parseFloat(mixTarjeta) || 0)
+    + (parseFloat(mixTransferencia) || 0) + (parseFloat(mixPlataforma) || 0)
+  const mixPending = total - mixTotal
+
   async function handleConfirm() {
+    setError('')
+    if (method === 'mixto') {
+      if (Math.abs(mixPending) > 0.01) { setError(`Faltan ${mxn(mixPending)} por asignar`); return }
+      if (parseFloat(mixPlataforma) > 0 && !mixPlatName) { setError('Selecciona la plataforma'); return }
+      const payments = []
+      if (parseFloat(mixEfectivo)      > 0) payments.push({ method: 'efectivo',      amount: parseFloat(mixEfectivo) })
+      if (parseFloat(mixTarjeta)       > 0) payments.push({ method: 'tarjeta',       amount: parseFloat(mixTarjeta) })
+      if (parseFloat(mixTransferencia) > 0) payments.push({ method: 'transferencia', amount: parseFloat(mixTransferencia) })
+      if (parseFloat(mixPlataforma)    > 0) payments.push({ method: 'plataforma',    amount: parseFloat(mixPlataforma), platform: mixPlatName })
+      setLoading(true)
+      try { await onComplete('mixto', null, 0, payments) }
+      catch { setError('Error al guardar la venta.'); setLoading(false) }
+      return
+    }
     if (!validCash) { setError('El efectivo recibido es menor al total'); return }
     if (method === 'plataforma' && !platform) { setError('Selecciona la plataforma'); return }
-    setLoading(true); setError('')
+    setLoading(true)
     try { await onComplete(method, platform, cashNum) }
     catch { setError('Error al guardar la venta. Intenta de nuevo.'); setLoading(false) }
   }
 
+  const METHODS = [
+    { id: 'efectivo',      icon: Banknote,   label: 'Efectivo'      },
+    { id: 'tarjeta',       icon: CreditCard, label: 'Tarjeta'       },
+    { id: 'transferencia', icon: Smartphone, label: 'Transferencia' },
+    { id: 'plataforma',    icon: Smartphone, label: 'Plataforma'    },
+    { id: 'mixto',         icon: Tag,        label: 'Mixto'         },
+  ]
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b">
           <h2 className="font-bold text-gray-800 text-lg">Método de pago</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-5 space-y-4">
           <p className="text-center text-3xl font-black text-gray-900">{mxn(total)}</p>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { id: 'efectivo',   icon: Banknote,   label: 'Efectivo'   },
-              { id: 'tarjeta',    icon: CreditCard, label: 'Tarjeta'    },
-              { id: 'plataforma', icon: Smartphone, label: 'Plataforma' },
-            ].map(({ id, icon: Icon, label }) => (
+
+          {/* Métodos */}
+          <div className="grid grid-cols-5 gap-1.5">
+            {METHODS.map(({ id, icon: Icon, label }) => (
               <button key={id} onClick={() => setMethod(id)}
-                className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
+                className={`flex flex-col items-center gap-1 p-2 rounded-xl border-2 transition-all ${
                   method === id ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-300'
                 }`}>
-                <Icon className="w-5 h-5" />
-                <span className="text-xs font-medium">{label}</span>
+                <Icon className="w-4 h-4" />
+                <span className="text-[10px] font-medium leading-tight text-center">{label}</span>
               </button>
             ))}
           </div>
+
+          {/* Efectivo */}
           {method === 'efectivo' && (
             <div>
               <label className="block text-sm text-gray-600 mb-1">Efectivo recibido</label>
@@ -882,6 +927,8 @@ function PaymentModal({ total, onClose, onComplete }) {
               )}
             </div>
           )}
+
+          {/* Plataforma */}
           {method === 'plataforma' && (
             <div>
               <label className="block text-sm text-gray-600 mb-1">Plataforma</label>
@@ -893,6 +940,41 @@ function PaymentModal({ total, onClose, onComplete }) {
               </select>
             </div>
           )}
+
+          {/* Mixto */}
+          {method === 'mixto' && (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500 mb-1">Distribuye el total entre los métodos que uses</p>
+              {[
+                { label: 'Efectivo',      value: mixEfectivo,      set: setMixEfectivo      },
+                { label: 'Tarjeta',       value: mixTarjeta,       set: setMixTarjeta        },
+                { label: 'Transferencia', value: mixTransferencia, set: setMixTransferencia  },
+                { label: 'Plataforma',    value: mixPlataforma,    set: setMixPlataforma     },
+              ].map(({ label, value, set }) => (
+                <div key={label} className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600 w-28 flex-shrink-0">{label}</span>
+                  <input type="number" min="0" value={value} onChange={e => set(e.target.value)}
+                    placeholder="$0"
+                    className="flex-1 border rounded-lg px-3 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-gray-400" />
+                </div>
+              ))}
+              {parseFloat(mixPlataforma) > 0 && (
+                <select value={mixPlatName} onChange={e => setMixPlatName(e.target.value)}
+                  className="w-full border rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400">
+                  <option value="">Selecciona plataforma...</option>
+                  <option>Rappi</option><option>Uber Eats</option><option>Mercado Pago</option>
+                  <option>DiDi Food</option><option>WhatsApp / Teléfono</option><option>Otra</option>
+                </select>
+              )}
+              <div className={`rounded-xl px-4 py-2 flex justify-between text-sm font-medium ${
+                Math.abs(mixPending) < 0.01 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+              }`}>
+                <span>{Math.abs(mixPending) < 0.01 ? '✓ Completo' : 'Pendiente'}</span>
+                <span>{Math.abs(mixPending) < 0.01 ? mxn(total) : mxn(mixPending)}</span>
+              </div>
+            </div>
+          )}
+
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
           <button onClick={handleConfirm} disabled={loading}
             className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-bold rounded-xl py-3.5 transition-colors">
