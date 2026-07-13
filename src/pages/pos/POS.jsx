@@ -1033,6 +1033,16 @@ function SuccessModal({ sale, onClose }) {
 
       <div className="print-only ticket">
         <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+          {(() => {
+            const LOGOS = {
+              'aaaaaaaa-0000-0000-0000-000000000001': '/logo.svg',
+              'aaaaaaaa-0000-0000-0000-000000000002': '/logo-foviste.svg',
+            }
+            const src = LOGOS[sale.branch_id]
+            return src ? (
+              <img src={src} alt="Logo" style={{ height: '48px', marginBottom: '4px', objectFit: 'contain' }} />
+            ) : null
+          })()}
           <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '0' }}>{sale.branchName ?? 'Pizza & Totó'}</p>
           <p style={{ fontSize: '10px', margin: '2px 0' }}>Grupo Lopval</p>
           <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>
