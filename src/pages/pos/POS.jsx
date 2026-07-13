@@ -1038,10 +1038,27 @@ function SuccessModal({ sale, onClose }) {
               'aaaaaaaa-0000-0000-0000-000000000001': '/logo.svg',
               'aaaaaaaa-0000-0000-0000-000000000002': '/logo-foviste.svg',
             }
-            const src = LOGOS[sale.branch_id]
-            return src ? (
-              <img src={src} alt="Logo" style={{ height: '48px', marginBottom: '4px', objectFit: 'contain' }} />
-            ) : null
+            const BRANCH_INFO = {
+              'aaaaaaaa-0000-0000-0000-000000000002': {
+                address: 'La Cintal 30, Fovissste III, 29050 Tuxtla Gutiérrez, Chis.',
+                phone:   '961 386 3750',
+                hours:   'Miércoles a lunes · 3 p.m. a 10:30 p.m.',
+              },
+            }
+            const src  = LOGOS[sale.branch_id]
+            const info = BRANCH_INFO[sale.branch_id]
+            return (
+              <>
+                {src && <img src={src} alt="Logo" style={{ height: '48px', marginBottom: '4px', objectFit: 'contain' }} />}
+                {info && (
+                  <>
+                    <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>{info.address}</p>
+                    <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>Tel: {info.phone}</p>
+                    <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>{info.hours}</p>
+                  </>
+                )}
+              </>
+            )
           })()}
           <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '0' }}>{sale.branchName ?? 'Pizza & Totó'}</p>
           <p style={{ fontSize: '10px', margin: '2px 0' }}>Grupo Lopval</p>
