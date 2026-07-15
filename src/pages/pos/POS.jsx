@@ -672,6 +672,55 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
 
   useEffect(() => { fetchSummary() }, [])
 
+  function printCorte() {
+    const now     = new Date()
+    const fecha   = now.toLocaleDateString('es-MX')
+    const hora    = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    const branch  = activeBranch?.name ?? 'Sucursal'
+    const s       = summary
+    const closing = parseFloat(closingAmt) || 0
+    const exp     = Number(cashRegister.opening_amount) + (s?.efectivo ?? 0)
+    const diff    = closing - exp
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Corte de Caja</title>
+    <style>
+      body { font-family: 'Courier New', monospace; font-size: 12px; max-width: 320px; margin: 0 auto; padding: 16px; }
+      h2 { text-align: center; font-size: 15px; margin: 0 0 4px; }
+      .sub { text-align: center; font-size: 10px; color: #555; margin: 2px 0; }
+      .divider { border-top: 1px dashed #000; margin: 8px 0; }
+      .row { display: flex; justify-content: space-between; margin: 3px 0; }
+      .bold { font-weight: bold; }
+      .diff-ok { color: green; } .diff-neg { color: red; } .diff-pos { color: #b45309; }
+    </style></head><body>
+    <h2>${branch}</h2>
+    <p class="sub">Grupo Lopval</p>
+    <p class="sub">Corte de Caja</p>
+    <p class="sub">${fecha} ${hora}</p>
+    <div class="divider"></div>
+    <div class="row"><span>Apertura</span><span>$${Number(cashRegister.opening_amount).toFixed(2)}</span></div>
+    <div class="row"><span>Efectivo</span><span>$${(s?.efectivo ?? 0).toFixed(2)}</span></div>
+    <div class="row"><span>Tarjeta</span><span>$${(s?.tarjeta ?? 0).toFixed(2)}</span></div>
+    <div class="row"><span>Transferencia</span><span>$${(s?.transferencia ?? 0).toFixed(2)}</span></div>
+    <div class="row"><span>Plataformas</span><span>$${(s?.plataforma ?? 0).toFixed(2)}</span></div>
+    <div class="divider"></div>
+    <div class="row bold"><span>Total ventas (${s?.count ?? 0} órd.)</span><span>$${(s?.total ?? 0).toFixed(2)}</span></div>
+    <div class="row bold"><span>Efectivo esperado</span><span>$${exp.toFixed(2)}</span></div>
+    ${closingAmt !== '' ? `<div class="row bold"><span>Efectivo contado</span><span>$${closing.toFixed(2)}</span></div>
+    <div class="row bold ${Math.abs(diff) < 1 ? 'diff-ok' : diff < 0 ? 'diff-neg' : 'diff-pos'}">
+      <span>Diferencia</span><span>${diff >= 0 ? '+' : ''}$${diff.toFixed(2)}</span></div>` : ''}
+    ${notes ? `<div class="divider"></div><p style="font-size:10px">Notas: ${notes}</p>` : ''}
+    <div class="divider"></div>
+    <p style="text-align:center;font-size:10px">Cajero: ${cashRegister.cashier_name ?? ''}</p>
+    </body></html>`
+
+    const w = window.open('', '_blank', 'width=400,height=600')
+    w.document.write(html)
+    w.document.close()
+    w.focus()
+    setTimeout(() => { w.print(); w.close() }, 400)
+  }
+
   async function fetchSummary() {
     setLoading(true)
 
@@ -737,7 +786,8 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
       total_sales:    summary?.total     ?? 0,
       total_cash:     summary?.efectivo  ?? 0,
       total_card:     summary?.tarjeta   ?? 0,
-      total_platform: summary?.plataforma ?? 0,
+      total_platform:  summary?.plataforma    ?? 0,
+      total_transfer:  summary?.transferencia ?? 0,
       difference,
       notes:          notes || null,
       // Parchar branch_id si quedó null en apertura (registros viejos)
@@ -810,6 +860,11 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
             />
             {error && <p className="text-red-500 text-sm">{error}</p>}
+
+            <button onClick={printCorte}
+              className="w-full flex items-center justify-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium rounded-xl py-3 transition-colors text-sm">
+              <Printer className="w-4 h-4" /> Imprimir corte
+            </button>
 
             <button onClick={handleClose} disabled={saving}
               className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-bold rounded-xl py-3.5 transition-colors">
