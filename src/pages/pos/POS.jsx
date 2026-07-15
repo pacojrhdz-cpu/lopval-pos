@@ -673,14 +673,36 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
   useEffect(() => { fetchSummary() }, [])
 
   function printCorte() {
-    const now     = new Date()
-    const fecha   = now.toLocaleDateString('es-MX')
-    const hora    = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
-    const branch  = activeBranch?.name ?? 'Sucursal'
-    const s       = summary
-    const closing = parseFloat(closingAmt) || 0
-    const exp     = Number(cashRegister.opening_amount) + (s?.efectivo ?? 0)
-    const diff    = closing - exp
+    const LOGOS = {
+      'aaaaaaaa-0000-0000-0000-000000000001': '/logo.svg',
+      'aaaaaaaa-0000-0000-0000-000000000002': '/logo-foviste.svg',
+    }
+    const BRANCH_INFO = {
+      'aaaaaaaa-0000-0000-0000-000000000002': {
+        address: 'La Cintal 30, Fovissste III, 29050 Tuxtla Gutiérrez, Chis.',
+        phone:   '961 386 3750',
+        hours:   'Miércoles a lunes · 3 p.m. a 10:30 p.m.',
+      },
+    }
+
+    const now      = new Date()
+    const fecha    = now.toLocaleDateString('es-MX')
+    const hora     = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    const branch   = activeBranch?.name ?? 'Sucursal'
+    const branchId = activeBranch?.id
+    const s        = summary
+    const closing  = parseFloat(closingAmt) || 0
+    const exp      = Number(cashRegister.opening_amount) + (s?.efectivo ?? 0)
+    const diff     = closing - exp
+    const origin   = window.location.origin
+    const logoPath = LOGOS[branchId]
+    const info     = BRANCH_INFO[branchId]
+    const logoTag  = logoPath
+      ? `<img src="${origin}${logoPath}" alt="Logo" style="display:block;margin:0 auto 6px;height:48px;object-fit:contain;">`
+      : ''
+    const infoBlock = info
+      ? `<p class="sub">${info.address}</p><p class="sub">Tel: ${info.phone}</p><p class="sub">${info.hours}</p>`
+      : ''
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Corte de Caja</title>
@@ -693,12 +715,15 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
       .bold { font-weight: bold; }
       .diff-ok { color: green; } .diff-neg { color: red; } .diff-pos { color: #b45309; }
     </style></head><body>
+    ${logoTag}
     <h2>${branch}</h2>
     <p class="sub">Grupo Lopval</p>
-    <p class="sub">Corte de Caja</p>
-    <p class="sub">${fecha} ${hora}</p>
+    ${infoBlock}
+    <p class="sub">Corte de Caja · ${fecha} ${hora}</p>
     <div class="divider"></div>
-    <div class="row"><span>Apertura</span><span>$${Number(cashRegister.opening_amount).toFixed(2)}</span></div>
+    <div class="row"><span>Cajero</span><span>${cashRegister.cashier_name ?? ''}</span></div>
+    <div class="row"><span>Apertura caja</span><span>$${Number(cashRegister.opening_amount).toFixed(2)}</span></div>
+    <div class="divider"></div>
     <div class="row"><span>Efectivo</span><span>$${(s?.efectivo ?? 0).toFixed(2)}</span></div>
     <div class="row"><span>Tarjeta</span><span>$${(s?.tarjeta ?? 0).toFixed(2)}</span></div>
     <div class="row"><span>Transferencia</span><span>$${(s?.transferencia ?? 0).toFixed(2)}</span></div>
@@ -711,7 +736,6 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
       <span>Diferencia</span><span>${diff >= 0 ? '+' : ''}$${diff.toFixed(2)}</span></div>` : ''}
     ${notes ? `<div class="divider"></div><p style="font-size:10px">Notas: ${notes}</p>` : ''}
     <div class="divider"></div>
-    <p style="text-align:center;font-size:10px">Cajero: ${cashRegister.cashier_name ?? ''}</p>
     </body></html>`
 
     const w = window.open('', '_blank', 'width=400,height=600')
