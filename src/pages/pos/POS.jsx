@@ -69,13 +69,29 @@ export default function POS() {
     if (activeBranch?.id) q = q.eq('branch_id', activeBranch.id)
     const { data: prods } = await q
 
-    // Solo obtener qué productos tienen modificadores (carga lazy en el modal)
-    const { data: assignments } = await supabase
-      .from('product_modifier_group_assignments')
-      .select('product_id')
+    const [{ data: assignments }, { data: combos }, { data: allProds }] = await Promise.all([
+      supabase.from('product_modifier_group_assignments').select('product_id'),
+      supabase.from('combo_items').select('combo_product_id, product_id, quantity'),
+      supabase.from('products').select('id, name'),
+    ])
 
-    const hasMods = new Set((assignments ?? []).map(a => a.product_id))
-    setProducts((prods ?? []).map(p => ({ ...p, hasMods: hasMods.has(p.id) })))
+    const hasMods   = new Set((assignments ?? []).map(a => a.product_id))
+    const prodNames = Object.fromEntries((allProds ?? []).map(p => [p.id, p.name]))
+
+    const comboMap = {}
+    for (const ci of (combos ?? [])) {
+      if (!comboMap[ci.combo_product_id]) comboMap[ci.combo_product_id] = []
+      comboMap[ci.combo_product_id].push({
+        ...ci,
+        products: { name: prodNames[ci.product_id] ?? 'Producto' },
+      })
+    }
+
+    setProducts((prods ?? []).map(p => ({
+      ...p,
+      hasMods:    hasMods.has(p.id),
+      comboItems: comboMap[p.id] ?? [],
+    })))
   }
   async function fetchRecentSales() {
     const { data } = await supabase.from('sales').select('id,created_at,total,payment_method').order('created_at', { ascending: false }).limit(5)
@@ -88,20 +104,21 @@ export default function POS() {
     return matchCat && matchSearch
   })
 
-  const addToCart = useCallback((product, selectedMods = [], fromModal = false, comboItems = []) => {
+  const addToCart = useCallback((product, selectedMods = [], fromModal = false, comboItems = null) => {
     if (product.hasMods && selectedMods.length === 0 && !fromModal) {
       setPendingProduct(product)
       return
     }
-    const extraPrice = selectedMods.reduce((s, m) => s + Number(m.price_extra ?? 0), 0)
-    const finalPrice = Number(product.price) + extraPrice
-    const cartKey    = product.id + (selectedMods.length ? '|' + selectedMods.map(m => m.id).sort().join(',') : '')
+    const extraPrice    = selectedMods.reduce((s, m) => s + Number(m.price_extra ?? 0), 0)
+    const finalPrice    = Number(product.price) + extraPrice
+    const cartKey       = product.id + (selectedMods.length ? '|' + selectedMods.map(m => m.id).sort().join(',') : '')
+    const resolvedCombo = comboItems ?? product.comboItems ?? []
     setCart(prev => {
       const idx = prev.findIndex(i => i.cartKey === cartKey)
       if (idx >= 0) {
         const next = [...prev]; next[idx] = { ...next[idx], qty: next[idx].qty + 1 }; return next
       }
-      return [...prev, { ...product, cartKey, price: finalPrice, mods: selectedMods, comboItems, qty: 1 }]
+      return [...prev, { ...product, cartKey, price: finalPrice, mods: selectedMods, comboItems: resolvedCombo, qty: 1 }]
     })
   }, [])
 
@@ -470,27 +487,21 @@ export default function POS() {
 
 // ─── Modifier Modal ───────────────────────────────────────────
 function ModifierModal({ product, onClose, onConfirm }) {
-  const [groups,     setGroups]     = useState([])
-  const [selected,   setSelected]   = useState({}) // groupId → Set de modifier ids
-  const [comboItems, setComboItems] = useState([])
-  const [loading,    setLoading]    = useState(true)
+  const [groups,   setGroups]   = useState([])
+  const [selected, setSelected] = useState({}) // groupId → Set de modifier ids
+  const [loading,  setLoading]  = useState(true)
+
+  const comboItems = product.comboItems ?? []
 
   useEffect(() => {
     async function load() {
-      const [{ data: assignments }, { data: cData }] = await Promise.all([
-        supabase
-          .from('product_modifier_group_assignments')
-          .select('sort_order, modifier_groups(*, modifiers(*))')
-          .eq('product_id', product.id)
-          .order('sort_order'),
-        supabase
-          .from('combo_items')
-          .select('*, products(name)')
-          .eq('combo_product_id', product.id),
-      ])
+      const { data: assignments } = await supabase
+        .from('product_modifier_group_assignments')
+        .select('sort_order, modifier_groups(*, modifiers(*))')
+        .eq('product_id', product.id)
+        .order('sort_order')
       const grps = (assignments ?? []).map(a => a.modifier_groups).filter(Boolean)
       setGroups(grps)
-      setComboItems(cData ?? [])
       setLoading(false)
     }
     load()
