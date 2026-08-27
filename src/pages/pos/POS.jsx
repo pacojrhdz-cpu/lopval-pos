@@ -202,11 +202,7 @@ export default function POS() {
     await supabase.from('kitchen_tickets').insert({
       branch_id:    activeBranch?.id ?? null,
       ticket_label: `Mostrador · ${horaVenta}`,
-      items:        cart.map(i => ({
-        name:  i.name,
-        qty:   i.qty,
-        notes: i.mods?.length ? i.mods.map(m => m.name).join(', ') : undefined,
-      })),
+      items:        cart.map(i => ({ name: i.name, qty: i.qty, notes: buildItemNotes(i) })),
       source:       'pos',
       reference_id: sale.id,
     })
@@ -361,6 +357,11 @@ export default function POS() {
                     {item.mods?.length > 0 && (
                       <p className="text-xs text-amber-600 truncate">
                         + {item.mods.map(m => m.name).join(', ')}
+                      </p>
+                    )}
+                    {item.comboItems?.length > 0 && (
+                      <p className="text-xs text-blue-600 truncate">
+                        📦 {item.comboItems.map(c => `${c.products?.name} ×${c.quantity}`).join(', ')}
                       </p>
                     )}
                     <p className="text-xs text-gray-500">{mxn(item.price)} c/u</p>
