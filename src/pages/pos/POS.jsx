@@ -491,11 +491,10 @@ export default function POS() {
 
 // ─── Modifier Modal ───────────────────────────────────────────
 function ModifierModal({ product, onClose, onConfirm }) {
-  const [groups,   setGroups]   = useState([])
-  const [selected, setSelected] = useState({}) // groupId → Set de modifier ids
-  const [loading,  setLoading]  = useState(true)
-
-  const comboItems = product.comboItems ?? []
+  const [groups,     setGroups]     = useState([])
+  const [selected,   setSelected]   = useState({})
+  const [comboItems, setComboItems] = useState(product.comboItems ?? [])
+  const [loading,    setLoading]    = useState(true)
 
   useEffect(() => {
     async function load() {
@@ -504,8 +503,21 @@ function ModifierModal({ product, onClose, onConfirm }) {
         .select('sort_order, modifier_groups(*, modifiers(*))')
         .eq('product_id', product.id)
         .order('sort_order')
-      const grps = (assignments ?? []).map(a => a.modifier_groups).filter(Boolean)
-      setGroups(grps)
+      setGroups((assignments ?? []).map(a => a.modifier_groups).filter(Boolean))
+
+      // Cargar componentes del combo directamente (sin join para evitar ambigüedad de FK)
+      const { data: cData } = await supabase
+        .from('combo_items')
+        .select('product_id, quantity')
+        .eq('combo_product_id', product.id)
+
+      if (cData?.length) {
+        const ids = cData.map(c => c.product_id)
+        const { data: pData } = await supabase.from('products').select('id, name').in('id', ids)
+        const names = Object.fromEntries((pData ?? []).map(p => [p.id, p.name]))
+        setComboItems(cData.map(c => ({ ...c, products: { name: names[c.product_id] ?? 'Producto' } })))
+      }
+
       setLoading(false)
     }
     load()
@@ -1203,8 +1215,20 @@ function SuccessModal({ sale, onClose }) {
         </div>
         <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '6px 0', margin: '6px 0' }}>
           {sale.items?.map((i, idx) => (
-            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px' }}>
-              <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
+            <div key={idx} style={{ marginBottom: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+                <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
+              </div>
+              {i.mods?.length > 0 && (
+                <div style={{ fontSize: '9px', color: '#777', paddingLeft: '8px' }}>
+                  + {i.mods.map(m => m.name).join(', ')}
+                </div>
+              )}
+              {i.comboItems?.length > 0 && i.comboItems.map((c, ci) => (
+                <div key={ci} style={{ fontSize: '9px', color: '#555', paddingLeft: '8px' }}>
+                  · {c.products?.name} ×{c.quantity}
+                </div>
+              ))}
             </div>
           ))}
         </div>
