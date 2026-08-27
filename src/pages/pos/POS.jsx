@@ -159,7 +159,9 @@ export default function POS() {
     const branch = activeBranch?.name ?? 'Mostrador'
     const rows   = cart.map(i => {
       const mods  = i.mods?.length ? `<div style="font-size:10px;color:#666;margin-left:8px">+ ${i.mods.map(m => m.name).join(', ')}</div>` : ''
-      const combo = i.comboItems?.length ? `<div style="font-size:10px;color:#666;margin-left:8px">Incluye: ${i.comboItems.map(c => `${c.products?.name} ×${c.quantity}`).join(', ')}</div>` : ''
+      const combo = i.comboItems?.length
+        ? i.comboItems.map(c => `<div style="font-size:10px;color:#555;margin-left:8px">· ${c.products?.name} ×${c.quantity}</div>`).join('')
+        : ''
       return `<div style="margin:6px 0;border-bottom:1px dashed #eee;padding-bottom:6px">
         <div style="display:flex;justify-content:space-between;font-weight:bold">
           <span>${i.name}</span><span>×${i.qty}</span>
@@ -377,9 +379,11 @@ export default function POS() {
                       </p>
                     )}
                     {item.comboItems?.length > 0 && (
-                      <p className="text-xs text-blue-600 truncate">
-                        📦 {item.comboItems.map(c => `${c.products?.name} ×${c.quantity}`).join(', ')}
-                      </p>
+                      <div className="text-xs text-blue-600 mt-0.5">
+                        {item.comboItems.map((c, idx) => (
+                          <div key={idx}>· {c.products?.name} ×{c.quantity}</div>
+                        ))}
+                      </div>
                     )}
                     <p className="text-xs text-gray-500">{mxn(item.price)} c/u</p>
                   </div>
