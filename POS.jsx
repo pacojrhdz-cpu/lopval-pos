@@ -71,14 +71,19 @@ export default function POS() {
 
     const [{ data: assignments }, { data: combos }] = await Promise.all([
       supabase.from('product_modifier_group_assignments').select('product_id'),
-      supabase.from('combo_items').select('combo_product_id, quantity, products(name)'),
+      supabase.from('combo_items').select('combo_product_id, product_id, quantity'),
     ])
 
-    const hasMods  = new Set((assignments ?? []).map(a => a.product_id))
+    const hasMods   = new Set((assignments ?? []).map(a => a.product_id))
+    const prodNames = Object.fromEntries((prods ?? []).map(p => [p.id, p.name]))
+
     const comboMap = {}
     for (const ci of (combos ?? [])) {
       if (!comboMap[ci.combo_product_id]) comboMap[ci.combo_product_id] = []
-      comboMap[ci.combo_product_id].push(ci)
+      comboMap[ci.combo_product_id].push({
+        ...ci,
+        products: { name: prodNames[ci.product_id] ?? 'Producto' },
+      })
     }
 
     setProducts((prods ?? []).map(p => ({
