@@ -88,7 +88,7 @@ export default function POS() {
     return matchCat && matchSearch
   })
 
-  const addToCart = useCallback((product, selectedMods = [], fromModal = false) => {
+  const addToCart = useCallback((product, selectedMods = [], fromModal = false, comboItems = []) => {
     if (product.hasMods && selectedMods.length === 0 && !fromModal) {
       setPendingProduct(product)
       return
@@ -101,7 +101,7 @@ export default function POS() {
       if (idx >= 0) {
         const next = [...prev]; next[idx] = { ...next[idx], qty: next[idx].qty + 1 }; return next
       }
-      return [...prev, { ...product, cartKey, price: finalPrice, mods: selectedMods, qty: 1 }]
+      return [...prev, { ...product, cartKey, price: finalPrice, mods: selectedMods, comboItems, qty: 1 }]
     })
   }, [])
 
@@ -113,6 +113,13 @@ export default function POS() {
   const discountAmt = Math.min(parseFloat(discount) || 0, subtotal)
   const total       = subtotal - discountAmt
 
+  function buildItemNotes(i) {
+    const parts = []
+    if (i.mods?.length)       parts.push(i.mods.map(m => m.name).join(', '))
+    if (i.comboItems?.length) parts.push('Incluye: ' + i.comboItems.map(c => `${c.products?.name} ×${c.quantity}`).join(', '))
+    return parts.length ? parts.join(' — ') : undefined
+  }
+
   async function sendComanda() {
     if (cart.length === 0) return
     setSendingCmd(true)
@@ -120,17 +127,39 @@ export default function POS() {
     const { error } = await supabase.from('kitchen_tickets').insert({
       branch_id:    activeBranch?.id ?? null,
       ticket_label: `Mostrador · ${hora}`,
-      items:        cart.map(i => ({
-        name:  i.name,
-        qty:   i.qty,
-        notes: i.mods?.length ? i.mods.map(m => m.name).join(', ') : undefined,
-      })),
+      items:        cart.map(i => ({ name: i.name, qty: i.qty, notes: buildItemNotes(i) })),
       source:       'pos',
     })
     setSendingCmd(false)
     if (error) { alert('Error comanda: ' + error.message); return }
     setCmdSent(true)
     setTimeout(() => setCmdSent(false), 3000)
+  }
+
+  function printOrder() {
+    if (cart.length === 0) return
+    const hora   = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    const branch = activeBranch?.name ?? 'Mostrador'
+    const rows   = cart.map(i => {
+      const mods  = i.mods?.length ? `<div style="font-size:10px;color:#666;margin-left:8px">+ ${i.mods.map(m => m.name).join(', ')}</div>` : ''
+      const combo = i.comboItems?.length ? `<div style="font-size:10px;color:#666;margin-left:8px">Incluye: ${i.comboItems.map(c => `${c.products?.name} ×${c.quantity}`).join(', ')}</div>` : ''
+      return `<div style="margin:6px 0;border-bottom:1px dashed #eee;padding-bottom:6px">
+        <div style="display:flex;justify-content:space-between;font-weight:bold">
+          <span>${i.name}</span><span>×${i.qty}</span>
+        </div>${mods}${combo}</div>`
+    }).join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Orden</title>
+    <style>body{font-family:'Courier New',monospace;font-size:12px;max-width:320px;margin:0 auto;padding:16px}
+    h2{text-align:center;font-size:14px;margin:0 0 2px}.sub{text-align:center;font-size:10px;color:#555;margin:2px 0}
+    .divider{border-top:1px dashed #000;margin:8px 0}</style></head><body>
+    <h2>${branch}</h2><p class="sub">Orden · ${hora}</p>
+    <div class="divider"></div>${rows}<div class="divider"></div>
+    <div style="display:flex;justify-content:space-between;font-weight:bold">
+      <span>Total</span><span>$${total.toFixed(2)}</span></div>
+    </body></html>`
+    const w = window.open('', '_blank', 'width=400,height=600')
+    w.document.write(html); w.document.close(); w.focus()
+    setTimeout(() => { w.print(); w.close() }, 400)
   }
 
   async function completeSale(paymentMethod, platformName, cashReceived, payments = null) {
@@ -387,17 +416,27 @@ export default function POS() {
             <div className="flex justify-between font-bold text-lg text-gray-900 border-t pt-2">
               <span>Total</span><span>{mxn(total)}</span>
             </div>
-            <button
-              onClick={sendComanda}
-              disabled={sendingCmd}
-              className={`w-full font-medium rounded-xl py-3 text-sm transition-colors flex items-center justify-center gap-2
-                ${cmdSent
-                  ? 'bg-green-100 text-green-700 border border-green-200'
-                  : 'bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 disabled:opacity-50'}`}
-            >
-              <ChefHat className="w-4 h-4" />
-              {cmdSent ? '¡Comanda enviada!' : sendingCmd ? 'Enviando...' : 'Mandar comanda a cocina'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={sendComanda}
+                disabled={sendingCmd}
+                className={`flex-1 font-medium rounded-xl py-3 text-sm transition-colors flex items-center justify-center gap-2
+                  ${cmdSent
+                    ? 'bg-green-100 text-green-700 border border-green-200'
+                    : 'bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 disabled:opacity-50'}`}
+              >
+                <ChefHat className="w-4 h-4" />
+                {cmdSent ? '¡Enviada!' : sendingCmd ? 'Enviando...' : 'Comanda'}
+              </button>
+              <button
+                onClick={printOrder}
+                disabled={cart.length === 0}
+                className="flex-1 font-medium rounded-xl py-3 text-sm border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+              >
+                <Printer className="w-4 h-4" />
+                Imprimir orden
+              </button>
+            </div>
             <button
               onClick={() => setShowPayment(true)}
               className="w-full bg-gray-900 hover:bg-gray-800 active:bg-black text-white font-bold rounded-xl py-3.5 transition-colors text-base"
@@ -411,7 +450,7 @@ export default function POS() {
       {pendingProduct && (
         <ModifierModal
           product={pendingProduct}
-          onConfirm={mods => { addToCart(pendingProduct, mods, true); setPendingProduct(null) }}
+          onConfirm={(mods, combo) => { addToCart(pendingProduct, mods, true, combo); setPendingProduct(null) }}
           onClose={() => setPendingProduct(null)}
         />
       )}
@@ -489,7 +528,7 @@ function ModifierModal({ product, onClose, onConfirm }) {
         if (mod) allMods.push(mod)
       }
     }
-    onConfirm(allMods)
+    onConfirm(allMods, comboItems)
   }
 
   const extraTotal = Object.values(selected)
