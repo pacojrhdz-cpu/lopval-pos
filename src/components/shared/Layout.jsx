@@ -5,7 +5,7 @@ import {
   ShoppingCart, LayoutDashboard, Package, BookOpen,
   Warehouse, BarChart2, ClipboardList, LogOut, Menu,
   ClipboardCheck, Scissors, MapPin, RefreshCw,
-  Users, CalendarDays
+  Users, CalendarDays, FileText
 } from 'lucide-react'
 
 const adminLinks = [
@@ -21,10 +21,17 @@ const adminLinks = [
   { to: '/admin/requisiciones', icon: ClipboardCheck,  label: 'Requisiciones'   },
   { to: '/admin/empleados',    icon: Users,           label: 'Empleados'       },
   { to: '/admin/asistencia',   icon: CalendarDays,    label: 'Asistencia'      },
+  { to: '/admin/reportes',     icon: FileText,        label: 'Reportes'        },
+]
+
+const managerLinks = [
+  { to: '/admin/inventario',    icon: Warehouse,      label: 'Inventario'    },
+  { to: '/admin/requisiciones', icon: ClipboardCheck, label: 'Requisiciones' },
+  { to: '/admin/reportes',      icon: FileText,       label: 'Reportes'      },
 ]
 
 export default function Layout({ children }) {
-  const { profile, isAdmin, signOut, activeBranch, setActiveBranch } = useAuth()
+  const { profile, isAdmin, isManager, signOut, activeBranch, setActiveBranch } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
 
@@ -87,6 +94,21 @@ export default function Layout({ children }) {
             <ClipboardCheck className="w-4 h-4 flex-shrink-0" />
             Requisición
           </NavLink>
+
+          {/* Links de encargado/gerente (no admin) */}
+          {isManager && !isAdmin && (
+            <>
+              <div className="px-3 pt-4 pb-1">
+                <p className="text-gray-600 text-xs uppercase tracking-wider">Gestión</p>
+              </div>
+              {managerLinks.map(({ to, icon: Icon, label }) => (
+                <NavLink key={to} to={to} className={navCls}>
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  {label}
+                </NavLink>
+              ))}
+            </>
+          )}
 
           {/* Links de admin */}
           {isAdmin && (
