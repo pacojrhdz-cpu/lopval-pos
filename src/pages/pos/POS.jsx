@@ -155,25 +155,43 @@ export default function POS() {
 
   function printOrder() {
     if (cart.length === 0) return
-    const hora   = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
-    const branch = activeBranch?.name ?? 'Mostrador'
+    const hora     = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    const branch   = activeBranch?.name ?? 'Mostrador'
+    const branchId = activeBranch?.id
+    const LOGOS = {
+      'aaaaaaaa-0000-0000-0000-000000000001': '/logo.svg',
+      'aaaaaaaa-0000-0000-0000-000000000002': '/logo-foviste.svg',
+      'aaaaaaaa-0000-0000-0000-000000000003': '/logo.svg',
+      'aaaaaaaa-0000-0000-0000-000000000004': '/logo.svg',
+    }
+    const logoPath = LOGOS[branchId]
+    const logoTag  = logoPath
+      ? `<img src="${window.location.origin}${logoPath}" alt="Logo" style="display:block;margin:0 auto 4px;height:44px;object-fit:contain;">`
+      : ''
     const rows   = cart.map(i => {
-      const mods  = i.mods?.length ? `<div style="font-size:10px;color:#666;margin-left:8px">+ ${i.mods.map(m => m.name).join(', ')}</div>` : ''
+      const mods  = i.mods?.length ? `<div class="item-mod">+ ${i.mods.map(m => m.name).join(', ')}</div>` : ''
       const combo = i.comboItems?.length
-        ? i.comboItems.map(c => `<div style="font-size:10px;color:#555;margin-left:8px">· ${c.products?.name} ×${c.quantity}</div>`).join('')
+        ? i.comboItems.map(c => `<div class="item-mod">· ${c.products?.name} ×${c.quantity}</div>`).join('')
         : ''
-      return `<div style="margin:6px 0;border-bottom:1px dashed #eee;padding-bottom:6px">
-        <div style="display:flex;justify-content:space-between;font-weight:bold">
-          <span>${i.name}</span><span>×${i.qty}</span>
+      return `<div style="margin:8px 0;border-bottom:1px dashed #ccc;padding-bottom:8px">
+        <div style="display:flex;justify-content:space-between">
+          <span class="item-name">${i.name}</span><span class="item-qty">×${i.qty}</span>
         </div>${mods}${combo}</div>`
     }).join('')
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Orden</title>
-    <style>body{font-family:'Courier New',monospace;font-size:12px;max-width:320px;margin:0 auto;padding:16px}
-    h2{text-align:center;font-size:14px;margin:0 0 2px}.sub{text-align:center;font-size:10px;color:#555;margin:2px 0}
-    .divider{border-top:1px dashed #000;margin:8px 0}</style></head><body>
-    <h2>${branch}</h2><p class="sub">Orden · ${hora}</p>
+    <style>
+      body{font-family:'Courier New',monospace;font-size:15px;max-width:320px;margin:0 auto;padding:16px;-webkit-print-color-adjust:exact}
+      h2{text-align:center;font-size:18px;font-weight:900;margin:0 0 2px}
+      .sub{text-align:center;font-size:12px;color:#444;margin:2px 0}
+      .divider{border-top:2px dashed #000;margin:8px 0}
+      .item-name{font-size:15px;font-weight:700}
+      .item-qty{font-size:15px;font-weight:700}
+      .item-mod{font-size:13px;color:#444;margin-left:8px}
+      .total-row{font-size:18px;font-weight:900}
+    </style></head><body>
+    ${logoTag}<h2>${branch}</h2><p class="sub">Orden · ${hora}</p>
     <div class="divider"></div>${rows}<div class="divider"></div>
-    <div style="display:flex;justify-content:space-between;font-weight:bold">
+    <div style="display:flex;justify-content:space-between" class="total-row">
       <span>Total</span><span>$${total.toFixed(2)}</span></div>
     </body></html>`
     const w = window.open('', '_blank', 'width=400,height=600')
@@ -743,6 +761,8 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
     const LOGOS = {
       'aaaaaaaa-0000-0000-0000-000000000001': '/logo.svg',
       'aaaaaaaa-0000-0000-0000-000000000002': '/logo-foviste.svg',
+      'aaaaaaaa-0000-0000-0000-000000000003': '/logo.svg',
+      'aaaaaaaa-0000-0000-0000-000000000004': '/logo.svg',
     }
     const BRANCH_INFO = {
       'aaaaaaaa-0000-0000-0000-000000000002': {
@@ -774,12 +794,12 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Corte de Caja</title>
     <style>
-      body { font-family: 'Courier New', monospace; font-size: 12px; max-width: 320px; margin: 0 auto; padding: 16px; }
-      h2 { text-align: center; font-size: 15px; margin: 0 0 4px; }
-      .sub { text-align: center; font-size: 10px; color: #555; margin: 2px 0; }
-      .divider { border-top: 1px dashed #000; margin: 8px 0; }
-      .row { display: flex; justify-content: space-between; margin: 3px 0; }
-      .bold { font-weight: bold; }
+      body { font-family: 'Courier New', monospace; font-size: 14px; max-width: 320px; margin: 0 auto; padding: 16px; -webkit-print-color-adjust: exact; }
+      h2 { text-align: center; font-size: 18px; font-weight: 900; margin: 0 0 4px; }
+      .sub { text-align: center; font-size: 12px; color: #444; margin: 2px 0; }
+      .divider { border-top: 2px dashed #000; margin: 8px 0; }
+      .row { display: flex; justify-content: space-between; margin: 4px 0; font-size: 14px; }
+      .bold { font-weight: 800; font-size: 15px; }
       .diff-ok { color: green; } .diff-neg { color: red; } .diff-pos { color: #b45309; }
     </style></head><body>
     ${logoTag}
@@ -1183,6 +1203,8 @@ function SuccessModal({ sale, onClose }) {
             const LOGOS = {
               'aaaaaaaa-0000-0000-0000-000000000001': '/logo.svg',
               'aaaaaaaa-0000-0000-0000-000000000002': '/logo-foviste.svg',
+              'aaaaaaaa-0000-0000-0000-000000000003': '/logo.svg',
+              'aaaaaaaa-0000-0000-0000-000000000004': '/logo.svg',
             }
             const BRANCH_INFO = {
               'aaaaaaaa-0000-0000-0000-000000000002': {
@@ -1213,19 +1235,19 @@ function SuccessModal({ sale, onClose }) {
           </p>
           {sale.cashier && <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>Cajero: {sale.cashier}</p>}
         </div>
-        <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '6px 0', margin: '6px 0' }}>
+        <div style={{ borderTop: '2px dashed #000', borderBottom: '2px dashed #000', padding: '8px 0', margin: '6px 0' }}>
           {sale.items?.map((i, idx) => (
-            <div key={idx} style={{ marginBottom: '4px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+            <div key={idx} style={{ marginBottom: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: '700' }}>
                 <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
               </div>
               {i.mods?.length > 0 && (
-                <div style={{ fontSize: '9px', color: '#777', paddingLeft: '8px' }}>
+                <div style={{ fontSize: '12px', color: '#555', paddingLeft: '8px' }}>
                   + {i.mods.map(m => m.name).join(', ')}
                 </div>
               )}
               {i.comboItems?.length > 0 && i.comboItems.map((c, ci) => (
-                <div key={ci} style={{ fontSize: '9px', color: '#555', paddingLeft: '8px' }}>
+                <div key={ci} style={{ fontSize: '12px', color: '#444', paddingLeft: '8px' }}>
                   · {c.products?.name} ×{c.quantity}
                 </div>
               ))}
@@ -1233,18 +1255,18 @@ function SuccessModal({ sale, onClose }) {
           ))}
         </div>
         {sale.discount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '2px' }}>
             <span>Descuento</span><span>-{mxn(sale.discount)}</span>
           </div>
         )}
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold', borderTop: '1px solid #000', paddingTop: '4px', marginTop: '4px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '17px', fontWeight: '900', borderTop: '2px solid #000', paddingTop: '5px', marginTop: '4px' }}>
           <span>TOTAL</span><span>{mxn(sale.total)}</span>
         </div>
-        <div style={{ marginTop: '6px', fontSize: '10px' }}>
+        <div style={{ marginTop: '6px', fontSize: '13px' }}>
           <p style={{ margin: '2px 0' }}>Pago: {methodLabel[sale.payment_method]}</p>
           {sale.change > 0 && <p style={{ margin: '2px 0' }}>Cambio: {mxn(sale.change)}</p>}
         </div>
-        <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '9px', color: '#555' }}>
+        <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '12px', color: '#444' }}>
           <p>¡Gracias por su visita!</p><p>Vuelva pronto</p>
         </div>
       </div>
