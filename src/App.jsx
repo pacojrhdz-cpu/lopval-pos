@@ -19,6 +19,7 @@ import AdminCorteCaja    from './pages/admin/AdminCorteCaja'
 import AdminCuentas      from './pages/admin/AdminCuentas'
 import AdminEmployees    from './pages/admin/AdminEmployees'
 import AdminAttendance   from './pages/admin/AdminAttendance'
+import Reports           from './pages/admin/Reports'
 import AttendanceClock   from './pages/AttendanceClock'
 import KitchenDisplay    from './pages/KitchenDisplay'
 
@@ -44,6 +45,13 @@ function AdminRoute({ children }) {
   return isAdmin ? children : <Navigate to="/pos" replace />
 }
 
+// Ruta accesible para admin O manager/encargado
+function ManagerRoute({ children }) {
+  const { isAdmin, isManager, loading } = useAuth()
+  if (loading) return null
+  return (isAdmin || isManager) ? children : <Navigate to="/pos" replace />
+}
+
 function W({ children }) {
   return (
     <PrivateRoute>
@@ -61,6 +69,19 @@ function A({ children }) {
         <AdminRoute>
           <Layout>{children}</Layout>
         </AdminRoute>
+      </BranchRoute>
+    </PrivateRoute>
+  )
+}
+
+// Wrapper para rutas admin + manager
+function M({ children }) {
+  return (
+    <PrivateRoute>
+      <BranchRoute>
+        <ManagerRoute>
+          <Layout>{children}</Layout>
+        </ManagerRoute>
       </BranchRoute>
     </PrivateRoute>
   )
@@ -86,13 +107,14 @@ function AppRoutes() {
       <Route path="/admin/productos"         element={<A><Products /></A>} />
       <Route path="/admin/modificadores"     element={<A><Modifiers /></A>} />
       <Route path="/admin/recetas"           element={<A><Recipes /></A>} />
-      <Route path="/admin/inventario"        element={<A><Inventory /></A>} />
+      <Route path="/admin/inventario"        element={<M><Inventory /></M>} />
       <Route path="/admin/estadisticas"      element={<A><Statistics /></A>} />
-      <Route path="/admin/requisiciones"     element={<A><AdminRequisitions /></A>} />
+      <Route path="/admin/requisiciones"     element={<M><AdminRequisitions /></M>} />
       <Route path="/admin/cortes"            element={<A><AdminCorteCaja /></A>} />
       <Route path="/admin/cuentas"            element={<A><AdminCuentas /></A>} />
       <Route path="/admin/empleados"         element={<A><AdminEmployees /></A>} />
       <Route path="/admin/asistencia"        element={<A><AdminAttendance /></A>} />
+      <Route path="/admin/reportes"          element={<M><Reports /></M>} />
 
       <Route path="/"  element={<Navigate to="/pos" replace />} />
       <Route path="*"  element={<Navigate to="/pos" replace />} />
