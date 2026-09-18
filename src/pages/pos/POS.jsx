@@ -6,8 +6,9 @@ import { mxn } from '../../utils/format'
 import {
   ShoppingCart, Search, Plus, Minus, Trash2, Tag,
   CreditCard, Banknote, Smartphone, X, CheckCircle, Clock,
-  Printer, BookOpen, Scissors, ChefHat
+  Printer, BookOpen, Scissors, ChefHat, FileText
 } from 'lucide-react'
+import InvoiceModal from '../../components/pos/InvoiceModal'
 
 const CAT_COLORS = {
   'Pizzas':    'bg-stone-100 text-stone-700 ring-stone-200',
@@ -34,6 +35,7 @@ export default function POS() {
   const [cashRegister,     setCashRegister]     = useState(null)
   const [checkingRegister, setCheckingRegister] = useState(true)
   const [showCorte,        setShowCorte]        = useState(false)
+  const [showInvoice,      setShowInvoice]      = useState(false)
   const [sendingCmd,       setSendingCmd]       = useState(false)
   const [cmdSent,          setCmdSent]          = useState(false)
   const [pendingProduct,   setPendingProduct]   = useState(null)  // producto esperando selección de modificadores
@@ -495,7 +497,26 @@ export default function POS() {
         />
       )}
       {showPayment && <PaymentModal total={total} onClose={() => setShowPayment(false)} onComplete={completeSale} />}
-      {lastSale    && <SuccessModal sale={lastSale} onClose={() => setLastSale(null)} />}
+      {lastSale && !showInvoice && (
+        <SuccessModal
+          sale={lastSale}
+          onClose={() => setLastSale(null)}
+          onRequestInvoice={() => setShowInvoice(true)}
+        />
+      )}
+      {showInvoice && lastSale && (
+        <InvoiceModal
+          sale={{
+            ...lastSale,
+            items: lastSale.items?.map(i => ({
+              name:       i.name,
+              quantity:   i.qty,
+              unit_price: i.price,
+            })),
+          }}
+          onClose={() => { setShowInvoice(false); setLastSale(null) }}
+        />
+      )}
       {showCorte   && (
         <CorteModal
           cashRegister={cashRegister}
@@ -1155,7 +1176,7 @@ function PaymentModal({ total, onClose, onComplete }) {
 }
 
 // ─── Modal de Éxito + Ticket ──────────────────────────────────
-function SuccessModal({ sale, onClose }) {
+function SuccessModal({ sale, onClose, onRequestInvoice }) {
   const methodLabel = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', plataforma: sale.platform_name }
   const now = new Date()
 
@@ -1184,15 +1205,21 @@ function SuccessModal({ sale, onClose }) {
               </div>
             ))}
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => window.print()}
-              className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-3 text-sm font-medium transition-colors">
-              <Printer className="w-4 h-4" /> Reimprimir
+          <div className="space-y-2">
+            <button onClick={onRequestInvoice}
+              className="w-full flex items-center justify-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl py-2.5 text-sm font-medium transition-colors">
+              <FileText className="w-4 h-4" /> Solicitar factura
             </button>
-            <button onClick={onClose}
-              className="flex-1 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl py-3 transition-colors">
-              Nueva venta
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => window.print()}
+                className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-3 text-sm font-medium transition-colors">
+                <Printer className="w-4 h-4" /> Reimprimir
+              </button>
+              <button onClick={onClose}
+                className="flex-1 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl py-3 transition-colors">
+                Nueva venta
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1268,6 +1295,14 @@ function SuccessModal({ sale, onClose }) {
         </div>
         <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '12px', color: '#444' }}>
           <p>¡Gracias por su visita!</p><p>Vuelva pronto</p>
+        </div>
+        <div style={{ textAlign: 'center', marginTop: '10px', borderTop: '1px dashed #ccc', paddingTop: '8px', fontSize: '10px', color: '#555' }}>
+          <p style={{ margin: '2px 0' }}>¿Necesitas factura?</p>
+          <p style={{ margin: '2px 0', fontWeight: 'bold' }}>{window.location.origin}/factura</p>
+          <p style={{ margin: '2px 0', fontFamily: 'monospace', fontWeight: 'bold', fontSize: '11px' }}>
+            Folio: {sale.id?.slice(-8).toUpperCase()}
+          </p>
+          <p style={{ margin: '2px 0', fontSize: '9px' }}>Válido hasta el último día del mes</p>
         </div>
       </div>
     </>
