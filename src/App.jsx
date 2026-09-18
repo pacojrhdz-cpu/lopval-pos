@@ -22,6 +22,7 @@ import AdminAttendance   from './pages/admin/AdminAttendance'
 import Reports           from './pages/admin/Reports'
 import AttendanceClock   from './pages/AttendanceClock'
 import KitchenDisplay    from './pages/KitchenDisplay'
+import Autofactura       from './pages/Autofactura'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -93,6 +94,7 @@ function AppRoutes() {
       <Route path="/login"         element={<Login />} />
       <Route path="/asistencia"    element={<AttendanceClock />} />
       <Route path="/cocina"        element={<KitchenDisplay />} />
+      <Route path="/factura"       element={<Autofactura />} />
       <Route path="/select-branch" element={<PrivateRoute><BranchSelector /></PrivateRoute>} />
 
       {/* Cajero + Admin */}
