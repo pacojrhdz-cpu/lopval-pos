@@ -105,7 +105,7 @@ function AppRoutes() {
 
       {/* Solo Admin */}
       <Route path="/admin"                   element={<A><Dashboard /></A>} />
-      <Route path="/admin/ventas"            element={<A><SalesHistory /></A>} />
+      <Route path="/admin/ventas"            element={<W><SalesHistory /></W>} />
       <Route path="/admin/productos"         element={<A><Products /></A>} />
       <Route path="/admin/modificadores"     element={<A><Modifiers /></A>} />
       <Route path="/admin/recetas"           element={<A><Recipes /></A>} />
