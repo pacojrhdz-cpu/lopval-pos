@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import { Plus, Trash2, X, Check, ChevronDown, ChevronRight, BookOpen } from 'lucide-react'
 
 export default function Recipes() {
+  const { activeBranch } = useAuth()
   const [products,    setProducts]    = useState([])
   const [ingredients, setIngredients] = useState([])
   const [recipes,     setRecipes]     = useState({}) // { product_id: [recipe_items] }
@@ -13,11 +15,13 @@ export default function Recipes() {
   const [saving,      setSaving]      = useState(false)
   const [search,      setSearch]      = useState('')
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => { fetchAll() }, [activeBranch])
 
   async function fetchAll() {
+    const branchId = activeBranch?.id
+    const productsQuery = supabase.from('products').select('*, categories(name,icon)').eq('active', true).order('name')
     const [{ data: p }, { data: i }, { data: r }] = await Promise.all([
-      supabase.from('products').select('*, categories(name,icon)').eq('active', true).order('name'),
+      branchId ? productsQuery.eq('branch_id', branchId) : productsQuery,
       supabase.from('ingredients').select('*').eq('active', true).order('name'),
       supabase.from('recipe_items').select('*, ingredients(name,unit)'),
     ])
