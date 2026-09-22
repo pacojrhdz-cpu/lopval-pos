@@ -497,13 +497,13 @@ export default function POS() {
         />
       )}
       {showPayment && <PaymentModal total={total} onClose={() => setShowPayment(false)} onComplete={completeSale} />}
-      {lastSale && !showInvoice && (
+      {lastSale && (
         <SuccessModal
           sale={lastSale}
           onClose={() => setLastSale(null)}
-          onRequestInvoice={() => setShowInvoice(true)}
         />
       )}
+      {/* FACTURACIÓN DESACTIVADA TEMPORALMENTE
       {showInvoice && lastSale && (
         <InvoiceModal
           sale={{
@@ -517,6 +517,7 @@ export default function POS() {
           onClose={() => { setShowInvoice(false); setLastSale(null) }}
         />
       )}
+      */}
       {showCorte   && (
         <CorteModal
           cashRegister={cashRegister}
@@ -786,10 +787,19 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
       'aaaaaaaa-0000-0000-0000-000000000004': '/logo.svg',
     }
     const BRANCH_INFO = {
+      'aaaaaaaa-0000-0000-0000-000000000001': {
+        address: 'Santa Matilde, Privadas Santa Matilde, Hgo., México',
+      },
       'aaaaaaaa-0000-0000-0000-000000000002': {
         address: 'La Cintal 30, Fovissste III, 29050 Tuxtla Gutiérrez, Chis.',
         phone:   '961 386 3750',
         hours:   'Miércoles a lunes · 3 p.m. a 10:30 p.m.',
+      },
+      'aaaaaaaa-0000-0000-0000-000000000003': {
+        address: 'Calle Ignacio Allende, Santiago Momoxpan, San Andrés Cholula, Pue.',
+      },
+      'aaaaaaaa-0000-0000-0000-000000000004': {
+        address: 'Avenida La Principal, San Antonio, Pachuca de Soto, Hgo.',
       },
     }
 
@@ -1206,10 +1216,12 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
             ))}
           </div>
           <div className="space-y-2">
+            {/* FACTURACIÓN DESACTIVADA TEMPORALMENTE
             <button onClick={onRequestInvoice}
               className="w-full flex items-center justify-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl py-2.5 text-sm font-medium transition-colors">
               <FileText className="w-4 h-4" /> Solicitar factura
             </button>
+            */}
             <div className="flex gap-2">
               <button onClick={() => window.print()}
                 className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-3 text-sm font-medium transition-colors">
@@ -1234,10 +1246,22 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
               'aaaaaaaa-0000-0000-0000-000000000004': '/logo.svg',
             }
             const BRANCH_INFO = {
+              'aaaaaaaa-0000-0000-0000-000000000001': {
+                address: 'Santa Matilde, Privadas Santa Matilde, Hgo., México',
+                qr:      '/qr-matilde.png',
+              },
               'aaaaaaaa-0000-0000-0000-000000000002': {
                 address: 'La Cintal 30, Fovissste III, 29050 Tuxtla Gutiérrez, Chis.',
                 phone:   '961 386 3750',
                 hours:   'Miércoles a lunes · 3 p.m. a 10:30 p.m.',
+              },
+              'aaaaaaaa-0000-0000-0000-000000000003': {
+                address: 'Calle Ignacio Allende, Santiago Momoxpan, San Andrés Cholula, Pue.',
+                qr:      '/qr-puebla.png',
+              },
+              'aaaaaaaa-0000-0000-0000-000000000004': {
+                address: 'Avenida La Principal, San Antonio, Pachuca de Soto, Hgo.',
+                qr:      '/qr-pachuca.png',
               },
             }
             const src  = LOGOS[sale.branch_id]
@@ -1248,8 +1272,8 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
                 {info && (
                   <>
                     <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>{info.address}</p>
-                    <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>Tel: {info.phone}</p>
-                    <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>{info.hours}</p>
+                    {info.phone && <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>Tel: {info.phone}</p>}
+                    {info.hours && <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>{info.hours}</p>}
                   </>
                 )}
               </>
@@ -1296,6 +1320,24 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
         <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '12px', color: '#444' }}>
           <p>¡Gracias por su visita!</p><p>Vuelva pronto</p>
         </div>
+        {(() => {
+          const BRANCH_QR = {
+            'aaaaaaaa-0000-0000-0000-000000000001': '/qr-matilde.png',
+            'aaaaaaaa-0000-0000-0000-000000000003': '/qr-puebla.png',
+            'aaaaaaaa-0000-0000-0000-000000000004': '/qr-pachuca.png',
+          }
+          const qr = BRANCH_QR[sale.branch_id]
+          return qr ? (
+            <div style={{ textAlign: 'center', marginTop: '10px', borderTop: '1px dashed #ccc', paddingTop: '8px' }}>
+              <p style={{ fontSize: '10px', color: '#555', margin: '0 0 6px' }}>
+                ¿Cómo fue tu experiencia? ¡Cuéntanos!
+              </p>
+              <img src={qr} alt="Google Review" style={{ width: '80px', height: '80px', margin: '0 auto' }} />
+              <p style={{ fontSize: '9px', color: '#888', margin: '4px 0 0' }}>Escanea para calificarnos en Google</p>
+            </div>
+          ) : null
+        })()}
+        {/* FACTURACIÓN DESACTIVADA TEMPORALMENTE
         <div style={{ textAlign: 'center', marginTop: '10px', borderTop: '1px dashed #ccc', paddingTop: '8px', fontSize: '10px', color: '#555' }}>
           <p style={{ margin: '2px 0' }}>¿Necesitas factura?</p>
           <p style={{ margin: '2px 0', fontWeight: 'bold' }}>{window.location.origin}/factura</p>
@@ -1304,6 +1346,7 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
           </p>
           <p style={{ margin: '2px 0', fontSize: '9px' }}>Válido hasta el último día del mes</p>
         </div>
+        */}
       </div>
     </>
   )
