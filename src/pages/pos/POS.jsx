@@ -9,6 +9,7 @@ import {
   Printer, BookOpen, Scissors, ChefHat, FileText
 } from 'lucide-react'
 import InvoiceModal from '../../components/pos/InvoiceModal'
+import { printTicket } from '../../utils/thermalPrinter'
 
 const CAT_COLORS = {
   'Pizzas':    'bg-stone-100 text-stone-700 ring-stone-200',
@@ -1186,13 +1187,26 @@ function PaymentModal({ total, onClose, onComplete }) {
 }
 
 // ─── Modal de Éxito + Ticket ──────────────────────────────────
+const BRANCH_INFO_PRINT = {
+  'aaaaaaaa-0000-0000-0000-000000000001': { address: 'Santa Matilde, Privadas Santa Matilde, Hgo.' },
+  'aaaaaaaa-0000-0000-0000-000000000002': { address: 'La Cintal 30, Fovissste III, Tuxtla Gutiérrez, Chis.', phone: '961 386 3750' },
+  'aaaaaaaa-0000-0000-0000-000000000003': { address: 'Calle Ignacio Allende, Santiago Momoxpan, San Andrés Cholula, Pue.' },
+  'aaaaaaaa-0000-0000-0000-000000000004': { address: 'Av. La Principal, San Antonio, Pachuca de Soto, Hgo.' },
+}
+
 function SuccessModal({ sale, onClose, onRequestInvoice }) {
   const methodLabel = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', plataforma: sale.platform_name }
   const now = new Date()
 
   useEffect(() => {
-    const timer = setTimeout(() => window.print(), 600)
-    return () => clearTimeout(timer)
+    const branchInfo = BRANCH_INFO_PRINT[sale.branch_id]
+    printTicket(sale, branchInfo).then(usedQZ => {
+      if (!usedQZ) {
+        // Fallback: impresión CSS si QZ Tray no está disponible
+        const timer = setTimeout(() => window.print(), 600)
+        return () => clearTimeout(timer)
+      }
+    })
   }, [])
 
   return (
