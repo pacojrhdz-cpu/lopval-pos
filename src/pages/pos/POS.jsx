@@ -1238,6 +1238,102 @@ const BRANCH_INFO_PRINT = {
   'aaaaaaaa-0000-0000-0000-000000000004': { address: 'Av. La Principal, San Antonio, Pachuca de Soto, Hgo.' },
 }
 
+const BRANCH_LOGOS = {
+  'aaaaaaaa-0000-0000-0000-000000000001': '/logo.svg',
+  'aaaaaaaa-0000-0000-0000-000000000002': '/logo-foviste.svg',
+  'aaaaaaaa-0000-0000-0000-000000000003': '/logo.svg',
+  'aaaaaaaa-0000-0000-0000-000000000004': '/logo.svg',
+}
+
+const BRANCH_QR = {
+  'aaaaaaaa-0000-0000-0000-000000000001': '/QR_Resena_Google_Matilde.png',
+  'aaaaaaaa-0000-0000-0000-000000000003': '/QR_Resena_Google_Puebla.png',
+  'aaaaaaaa-0000-0000-0000-000000000004': '/QR_Resena_Google_Pachuca.png',
+}
+
+function openTicketWindow(sale) {
+  const now    = new Date()
+  const fecha  = now.toLocaleDateString('es-MX')
+  const hora   = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+  const info   = BRANCH_INFO_PRINT[sale.branch_id] ?? {}
+  const logo   = BRANCH_LOGOS[sale.branch_id]
+  const qr     = BRANCH_QR[sale.branch_id]
+  const origin = window.location.origin
+  const mxn    = n => `$${Number(n ?? 0).toFixed(2)}`
+  const iva    = (sale.total ?? 0) * 16 / 116
+  const base   = (sale.total ?? 0) - iva
+  const METHOD = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', plataforma: sale.platform_name ?? 'Plataforma', mixto: 'Mixto' }
+
+  const itemRows = (sale.items ?? []).map(i => {
+    const mods  = i.mods?.length  ? `<div class="mod">+ ${i.mods.map(m => m.name).join(', ')}</div>` : ''
+    const combo = i.comboItems?.length ? i.comboItems.map(c => `<div class="mod">· ${c.products?.name} ×${c.quantity}</div>`).join('') : ''
+    const note  = i.note ? `<div class="mod obs">* ${i.note}</div>` : ''
+    return `<div class="item">
+      <div class="item-row"><span>${i.name} x${i.qty}</span><span>${mxn((i.price ?? 0) * (i.qty ?? 1))}</span></div>
+      ${mods}${combo}${note}
+    </div>`
+  }).join('')
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket</title>
+  <style>
+    @page { size: 80mm auto; margin: 0; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Courier New', monospace; font-size: 13px; width: 76mm; margin: 0 auto; padding: 3mm 2mm; color: #000; background: #fff; }
+    .center { text-align: center; }
+    .bold { font-weight: 900; }
+    .big { font-size: 17px; font-weight: 900; }
+    .small { font-size: 10px; color: #555; margin: 1px 0; }
+    .dash { border-top: 2px dashed #000; margin: 5px 0; }
+    .row { display: flex; justify-content: space-between; margin: 2px 0; }
+    .item { margin: 5px 0; border-bottom: 1px dashed #ccc; padding-bottom: 4px; }
+    .item-row { display: flex; justify-content: space-between; font-weight: 700; }
+    .mod { font-size: 11px; color: #555; padding-left: 6px; }
+    .obs { color: #b45309; }
+    .total-row { display: flex; justify-content: space-between; font-size: 17px; font-weight: 900; border-top: 2px solid #000; padding-top: 4px; margin-top: 3px; }
+    .iva { font-size: 11px; color: #666; margin-top: 4px; border-top: 1px dashed #ccc; padding-top: 3px; }
+    img { display: block; margin: 0 auto; }
+  </style></head><body>
+  <div class="center">
+    ${logo ? `<img src="${origin}${logo}" style="height:44px;object-fit:contain;margin-bottom:4px;">` : ''}
+    <div class="big">${sale.branchName ?? 'Pizza & Totó'}</div>
+    <div class="small">Grupo Lopval</div>
+    ${info.address ? `<div class="small">${info.address}</div>` : ''}
+    ${info.phone   ? `<div class="small">Tel: ${info.phone}</div>` : ''}
+    <div class="small">${fecha} ${hora}</div>
+    ${sale.cashier      ? `<div class="small">Cajero: ${sale.cashier}</div>` : ''}
+    ${sale.customerName ? `<div class="small">Cliente: ${sale.customerName}</div>` : ''}
+  </div>
+  <div class="dash"></div>
+  ${itemRows}
+  <div class="dash"></div>
+  ${sale.discount > 0 ? `<div class="row"><span>Descuento</span><span>-${mxn(sale.discount)}</span></div>` : ''}
+  <div class="total-row"><span>TOTAL</span><span>${mxn(sale.total)}</span></div>
+  <div class="iva">
+    <div class="row"><span>Subtotal s/IVA</span><span>${mxn(base)}</span></div>
+    <div class="row"><span>IVA (16%)</span><span>${mxn(iva)}</span></div>
+    <div class="small">* Precios con IVA incluido · Moneda Nacional</div>
+  </div>
+  <div class="dash"></div>
+  <div class="row"><span>Pago:</span><span>${METHOD[sale.payment_method] ?? ''}</span></div>
+  ${sale.change > 0 ? `<div class="row"><span>Cambio:</span><span>${mxn(sale.change)}</span></div>` : ''}
+  <div class="center" style="margin-top:10px;">
+    <div>¡Gracias por su visita!</div><div>Vuelva pronto</div>
+  </div>
+  ${qr ? `<div class="center" style="margin-top:8px;border-top:1px dashed #ccc;padding-top:6px;">
+    <div class="small">¿Cómo fue tu experiencia? ¡Cuéntanos!</div>
+    <img src="${origin}${qr}" style="width:72px;height:72px;margin:4px auto;">
+    <div class="small">Escanea para calificarnos en Google</div>
+  </div>` : ''}
+  </body></html>`
+
+  const w = window.open('', '_blank', 'width=320,height=600')
+  if (!w) return
+  w.document.write(html)
+  w.document.close()
+  w.focus()
+  setTimeout(() => { w.print(); w.close() }, 500)
+}
+
 function SuccessModal({ sale, onClose, onRequestInvoice }) {
   const methodLabel = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', plataforma: sale.platform_name }
   const now = new Date()
@@ -1245,9 +1341,10 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
   const branchInfo = BRANCH_INFO_PRINT[sale.branch_id]
 
   useEffect(() => {
-    // Intenta imprimir con JSPrintManager automáticamente
-    // Si falla, el cajero usa el botón "Reimprimir"
-    printTicket(sale, branchInfo)
+    // Intenta imprimir con JSPrintManager; si falla, abre ventana de ticket
+    printTicket(sale, branchInfo).then(ok => {
+      if (!ok) openTicketWindow(sale)
+    })
   }, [])
 
   return (
@@ -1280,7 +1377,7 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
             <div className="flex gap-2">
               <button onClick={async () => {
                 const ok = await printTicket(sale, branchInfo)
-                if (!ok) window.print()
+                if (!ok) openTicketWindow(sale)
               }}
                 className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-3 text-sm font-medium transition-colors">
                 <Printer className="w-4 h-4" /> Reimprimir
@@ -1294,143 +1391,6 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
         </div>
       </div>
 
-      <div className="print-only ticket">
-        <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-          {(() => {
-            const LOGOS = {
-              'aaaaaaaa-0000-0000-0000-000000000001': '/logo.svg',
-              'aaaaaaaa-0000-0000-0000-000000000002': '/logo-foviste.svg',
-              'aaaaaaaa-0000-0000-0000-000000000003': '/logo.svg',
-              'aaaaaaaa-0000-0000-0000-000000000004': '/logo.svg',
-            }
-            const BRANCH_INFO = {
-              'aaaaaaaa-0000-0000-0000-000000000001': {
-                address: 'Santa Matilde, Privadas Santa Matilde, Hgo., México',
-                qr:      '/qr-matilde.png',
-              },
-              'aaaaaaaa-0000-0000-0000-000000000002': {
-                address: 'La Cintal 30, Fovissste III, 29050 Tuxtla Gutiérrez, Chis.',
-                phone:   '961 386 3750',
-                hours:   'Miércoles a lunes · 3 p.m. a 10:30 p.m.',
-              },
-              'aaaaaaaa-0000-0000-0000-000000000003': {
-                address: 'Calle Ignacio Allende, Santiago Momoxpan, San Andrés Cholula, Pue.',
-                qr:      '/qr-puebla.png',
-              },
-              'aaaaaaaa-0000-0000-0000-000000000004': {
-                address: 'Avenida La Principal, San Antonio, Pachuca de Soto, Hgo.',
-                qr:      '/qr-pachuca.png',
-              },
-            }
-            const src  = LOGOS[sale.branch_id]
-            const info = BRANCH_INFO[sale.branch_id]
-            return (
-              <>
-                {src && <img src={src} alt="Logo" style={{ height: '48px', marginBottom: '4px', objectFit: 'contain' }} />}
-                {info && (
-                  <>
-                    <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>{info.address}</p>
-                    {info.phone && <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>Tel: {info.phone}</p>}
-                    {info.hours && <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>{info.hours}</p>}
-                  </>
-                )}
-              </>
-            )
-          })()}
-          <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '0' }}>{sale.branchName ?? 'Pizza & Totó'}</p>
-          <p style={{ fontSize: '10px', margin: '2px 0' }}>Grupo Lopval</p>
-          <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>
-            {now.toLocaleDateString('es-MX')} {now.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})}
-          </p>
-          {sale.cashier && <p style={{ fontSize: '9px', color: '#555', margin: '2px 0' }}>Cajero: {sale.cashier}</p>}
-        </div>
-        <div style={{ borderTop: '2px dashed #000', borderBottom: '2px dashed #000', padding: '8px 0', margin: '6px 0' }}>
-          {sale.items?.map((i, idx) => (
-            <div key={idx} style={{ marginBottom: '6px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: '700' }}>
-                <span>{i.name} x{i.qty}</span><span>{mxn(i.price * i.qty)}</span>
-              </div>
-              {i.mods?.length > 0 && (
-                <div style={{ fontSize: '12px', color: '#555', paddingLeft: '8px' }}>
-                  + {i.mods.map(m => m.name).join(', ')}
-                </div>
-              )}
-              {i.comboItems?.length > 0 && i.comboItems.map((c, ci) => (
-                <div key={ci} style={{ fontSize: '12px', color: '#444', paddingLeft: '8px' }}>
-                  · {c.products?.name} ×{c.quantity}
-                </div>
-              ))}
-              {i.note && (
-                <div style={{ fontSize: '12px', color: '#b45309', paddingLeft: '8px' }}>
-                  * {i.note}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-        {sale.customerName && (
-          <div style={{ fontSize: '13px', marginBottom: '4px' }}>
-            <span>Cliente: <strong>{sale.customerName}</strong></span>
-          </div>
-        )}
-        {sale.discount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '2px' }}>
-            <span>Descuento</span><span>-{mxn(sale.discount)}</span>
-          </div>
-        )}
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '17px', fontWeight: '900', borderTop: '2px solid #000', paddingTop: '5px', marginTop: '4px' }}>
-          <span>TOTAL</span><span>{mxn(sale.total)}</span>
-        </div>
-        {(() => {
-          const iva     = sale.total * 16 / 116
-          const base    = sale.total - iva
-          return (
-            <div style={{ fontSize: '11px', color: '#666', marginTop: '4px', borderTop: '1px dashed #ccc', paddingTop: '4px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Subtotal s/IVA</span><span>{mxn(base)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>IVA (16%)</span><span>{mxn(iva)}</span>
-              </div>
-              <p style={{ margin: '2px 0', fontSize: '10px' }}>* Precios con IVA incluido · Moneda Nacional</p>
-            </div>
-          )
-        })()}
-        <div style={{ marginTop: '6px', fontSize: '13px' }}>
-          <p style={{ margin: '2px 0' }}>Pago: {methodLabel[sale.payment_method]}</p>
-          {sale.change > 0 && <p style={{ margin: '2px 0' }}>Cambio: {mxn(sale.change)}</p>}
-        </div>
-        <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '12px', color: '#444' }}>
-          <p>¡Gracias por su visita!</p><p>Vuelva pronto</p>
-        </div>
-        {(() => {
-          const BRANCH_QR = {
-            'aaaaaaaa-0000-0000-0000-000000000001': '/QR_Resena_Google_Matilde.png',
-            'aaaaaaaa-0000-0000-0000-000000000003': '/QR_Resena_Google_Puebla.png',
-            'aaaaaaaa-0000-0000-0000-000000000004': '/QR_Resena_Google_Pachuca.png',
-          }
-          const qr = BRANCH_QR[sale.branch_id]
-          return qr ? (
-            <div style={{ textAlign: 'center', marginTop: '10px', borderTop: '1px dashed #ccc', paddingTop: '8px' }}>
-              <p style={{ fontSize: '10px', color: '#555', margin: '0 0 6px' }}>
-                ¿Cómo fue tu experiencia? ¡Cuéntanos!
-              </p>
-              <img src={qr} alt="Google Review" style={{ width: '80px', height: '80px', margin: '0 auto' }} />
-              <p style={{ fontSize: '9px', color: '#888', margin: '4px 0 0' }}>Escanea para calificarnos en Google</p>
-            </div>
-          ) : null
-        })()}
-        {/* FACTURACIÓN DESACTIVADA TEMPORALMENTE
-        <div style={{ textAlign: 'center', marginTop: '10px', borderTop: '1px dashed #ccc', paddingTop: '8px', fontSize: '10px', color: '#555' }}>
-          <p style={{ margin: '2px 0' }}>¿Necesitas factura?</p>
-          <p style={{ margin: '2px 0', fontWeight: 'bold' }}>{window.location.origin}/factura</p>
-          <p style={{ margin: '2px 0', fontFamily: 'monospace', fontWeight: 'bold', fontSize: '11px' }}>
-            Folio: {sale.id?.slice(-8).toUpperCase()}
-          </p>
-          <p style={{ margin: '2px 0', fontSize: '9px' }}>Válido hasta el último día del mes</p>
-        </div>
-        */}
-      </div>
     </>
   )
 }
