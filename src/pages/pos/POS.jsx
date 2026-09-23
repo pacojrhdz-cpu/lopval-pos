@@ -6,10 +6,10 @@ import { mxn } from '../../utils/format'
 import {
   ShoppingCart, Search, Plus, Minus, Trash2, Tag,
   CreditCard, Banknote, Smartphone, X, CheckCircle, Clock,
-  Printer, BookOpen, Scissors, ChefHat, FileText
+  Printer, BookOpen, Scissors, ChefHat, FileText, MessageSquare
 } from 'lucide-react'
 import InvoiceModal from '../../components/pos/InvoiceModal'
-import { printTicket } from '../../utils/thermalPrinter'
+import { printTicket, printComanda } from '../../utils/thermalPrinter'
 
 const CAT_COLORS = {
   'Pizzas':    'bg-stone-100 text-stone-700 ring-stone-200',
@@ -40,6 +40,7 @@ export default function POS() {
   const [sendingCmd,       setSendingCmd]       = useState(false)
   const [cmdSent,          setCmdSent]          = useState(false)
   const [pendingProduct,   setPendingProduct]   = useState(null)  // producto esperando selección de modificadores
+  const [noteItem,         setNoteItem]         = useState(null)  // item del carrito en edición de notas
 
   useEffect(() => {
     fetchCategories()
@@ -127,6 +128,7 @@ export default function POS() {
 
   const updateQty  = (cartKey, delta) => setCart(prev => prev.map(i => i.cartKey === cartKey ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0))
   const removeItem = (cartKey)        => setCart(prev => prev.filter(i => i.cartKey !== cartKey))
+  const updateNote = (cartKey, note)  => setCart(prev => prev.map(i => i.cartKey === cartKey ? { ...i, note } : i))
   const clearCart  = ()          => { setCart([]); setDiscount(''); setDiscReason('') }
 
   const subtotal    = cart.reduce((s, i) => s + i.price * i.qty, 0)
@@ -137,6 +139,7 @@ export default function POS() {
     const parts = []
     if (i.mods?.length)       parts.push(i.mods.map(m => m.name).join(', '))
     if (i.comboItems?.length) parts.push('Incluye: ' + i.comboItems.map(c => `${c.products?.name} ×${c.quantity}`).join(', '))
+    if (i.note)               parts.push(i.note)
     return parts.length ? parts.join(' — ') : undefined
   }
 
@@ -144,23 +147,32 @@ export default function POS() {
     if (cart.length === 0) return
     setSendingCmd(true)
     const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    const ticketLabel = `Mostrador · ${hora}`
+    const items = cart.map(i => ({ name: i.name, qty: i.qty, notes: buildItemNotes(i) }))
     const { error } = await supabase.from('kitchen_tickets').insert({
       branch_id:    activeBranch?.id ?? null,
-      ticket_label: `Mostrador · ${hora}`,
-      items:        cart.map(i => ({ name: i.name, qty: i.qty, notes: buildItemNotes(i) })),
+      ticket_label: ticketLabel,
+      items,
       source:       'pos',
     })
     setSendingCmd(false)
     if (error) { alert('Error comanda: ' + error.message); return }
+    // Imprimir comanda en impresora térmica via JSPrintManager
+    printComanda(activeBranch?.name, ticketLabel, items)
     setCmdSent(true)
     setTimeout(() => setCmdSent(false), 3000)
   }
 
-  function printOrder() {
+  async function printOrder() {
     if (cart.length === 0) return
     const hora     = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
     const branch   = activeBranch?.name ?? 'Mostrador'
     const branchId = activeBranch?.id
+
+    // Intentar imprimir con JSPrintManager primero
+    const items = cart.map(i => ({ name: i.name, qty: i.qty, notes: buildItemNotes(i) }))
+    const printed = await printComanda(branch, `Orden · ${hora}`, items)
+    if (printed) return   // JSPrintManager lo imprimió, no necesitamos window.print()
     const LOGOS = {
       'aaaaaaaa-0000-0000-0000-000000000001': '/logo.svg',
       'aaaaaaaa-0000-0000-0000-000000000002': '/logo-foviste.svg',
@@ -202,7 +214,7 @@ export default function POS() {
     setTimeout(() => { w.print(); w.close() }, 400)
   }
 
-  async function completeSale(paymentMethod, platformName, cashReceived, payments = null) {
+  async function completeSale(paymentMethod, platformName, cashReceived, payments = null, customerName = '') {
     const changeGiven = paymentMethod === 'efectivo' ? (cashReceived - total) : 0
     const { data: sale, error } = await supabase.from('sales').insert({
       cashier_id:       user?.id,
@@ -247,7 +259,7 @@ export default function POS() {
       reference_id: sale.id,
     })
 
-    setLastSale({ ...sale, items: cart, change: changeGiven, cashier: profile?.name ?? 'Cajero', branchName: activeBranch?.name })
+    setLastSale({ ...sale, items: cart, change: changeGiven, cashier: profile?.name ?? 'Cajero', branchName: activeBranch?.name, customerName })
     clearCart()
     setShowPayment(false)
     fetchRecentSales()
@@ -391,36 +403,51 @@ export default function POS() {
           ) : (
             <div className="p-3 space-y-2">
               {cart.map(item => (
-                <div key={item.cartKey} className="flex items-start gap-2 bg-gray-50 rounded-xl p-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
-                    {item.mods?.length > 0 && (
-                      <p className="text-xs text-amber-600 truncate">
-                        + {item.mods.map(m => m.name).join(', ')}
-                      </p>
-                    )}
-                    {item.comboItems?.length > 0 && (
-                      <div className="text-xs text-blue-600 mt-0.5">
-                        {item.comboItems.map((c, idx) => (
-                          <div key={idx}>· {c.products?.name} ×{c.quantity}</div>
-                        ))}
-                      </div>
-                    )}
-                    <p className="text-xs text-gray-500">{mxn(item.price)} c/u</p>
+                <div key={item.cartKey} className="bg-gray-50 rounded-xl p-2">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                      {item.mods?.length > 0 && (
+                        <p className="text-xs text-amber-600 truncate">
+                          + {item.mods.map(m => m.name).join(', ')}
+                        </p>
+                      )}
+                      {item.comboItems?.length > 0 && (
+                        <div className="text-xs text-blue-600 mt-0.5">
+                          {item.comboItems.map((c, idx) => (
+                            <div key={idx}>· {c.products?.name} ×{c.quantity}</div>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-500">{mxn(item.price)} c/u</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setNoteItem(item)}
+                        title="Agregar observación"
+                        className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${item.note ? 'bg-orange-100 text-orange-600' : 'bg-gray-200 hover:bg-gray-300 text-gray-500'}`}
+                      >
+                        <MessageSquare className="w-3 h-3" />
+                      </button>
+                      <button onClick={() => updateQty(item.cartKey, -1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <span className="w-6 text-center text-sm font-bold">{item.qty}</span>
+                      <button onClick={() => updateQty(item.cartKey, 1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
+                        <Plus className="w-3 h-3" />
+                      </button>
+                      <button onClick={() => removeItem(item.cartKey)} className="w-7 h-7 rounded-full hover:bg-red-100 flex items-center justify-center text-gray-400 hover:text-red-500 ml-1 transition-colors">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <p className="text-sm font-bold text-gray-800 w-14 text-right">{mxn(item.price * item.qty)}</p>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => updateQty(item.cartKey, -1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <span className="w-6 text-center text-sm font-bold">{item.qty}</span>
-                    <button onClick={() => updateQty(item.cartKey, 1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
-                      <Plus className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => removeItem(item.cartKey)} className="w-7 h-7 rounded-full hover:bg-red-100 flex items-center justify-center text-gray-400 hover:text-red-500 ml-1 transition-colors">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                  <p className="text-sm font-bold text-gray-800 w-14 text-right">{mxn(item.price * item.qty)}</p>
+                  {item.note && (
+                    <div className="mt-1.5 flex items-start gap-1 bg-orange-50 rounded-lg px-2 py-1">
+                      <MessageSquare className="w-3 h-3 text-orange-400 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-orange-700 leading-tight">{item.note}</p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -495,6 +522,13 @@ export default function POS() {
           product={pendingProduct}
           onConfirm={(mods, combo) => { addToCart(pendingProduct, mods, true, combo); setPendingProduct(null) }}
           onClose={() => setPendingProduct(null)}
+        />
+      )}
+      {noteItem && (
+        <NoteModal
+          item={noteItem}
+          onConfirm={(note) => { updateNote(noteItem.cartKey, note); setNoteItem(null) }}
+          onClose={() => setNoteItem(null)}
         />
       )}
       {showPayment && <PaymentModal total={total} onClose={() => setShowPayment(false)} onComplete={completeSale} />}
@@ -1031,11 +1065,12 @@ function Row({ label, value, cls = 'text-gray-800', bold = false }) {
 
 // ─── Modal de Pago ────────────────────────────────────────────
 function PaymentModal({ total, onClose, onComplete }) {
-  const [method,      setMethod]      = useState('efectivo')
-  const [platform,    setPlatform]    = useState('')
-  const [cash,        setCash]        = useState('')
-  const [loading,     setLoading]     = useState(false)
-  const [error,       setError]       = useState('')
+  const [method,        setMethod]      = useState('efectivo')
+  const [platform,      setPlatform]    = useState('')
+  const [cash,          setCash]        = useState('')
+  const [loading,       setLoading]     = useState(false)
+  const [error,         setError]       = useState('')
+  const [customerName,  setCustomerName]= useState('')
   // Pago mixto
   const [mixEfectivo,      setMixEfectivo]      = useState('')
   const [mixTarjeta,       setMixTarjeta]        = useState('')
@@ -1063,14 +1098,14 @@ function PaymentModal({ total, onClose, onComplete }) {
       if (parseFloat(mixTransferencia) > 0) payments.push({ method: 'transferencia', amount: parseFloat(mixTransferencia) })
       if (parseFloat(mixPlataforma)    > 0) payments.push({ method: 'plataforma',    amount: parseFloat(mixPlataforma), platform: mixPlatName })
       setLoading(true)
-      try { await onComplete('mixto', null, 0, payments) }
+      try { await onComplete('mixto', null, 0, payments, customerName) }
       catch { setError('Error al guardar la venta.'); setLoading(false) }
       return
     }
     if (!validCash) { setError('El efectivo recibido es menor al total'); return }
     if (method === 'plataforma' && !platform) { setError('Selecciona la plataforma'); return }
     setLoading(true)
-    try { await onComplete(method, platform, cashNum) }
+    try { await onComplete(method, platform, cashNum, null, customerName) }
     catch { setError('Error al guardar la venta. Intenta de nuevo.'); setLoading(false) }
   }
 
@@ -1174,6 +1209,15 @@ function PaymentModal({ total, onClose, onComplete }) {
               </div>
             </div>
           )}
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Nombre del cliente (opcional)</label>
+            <input
+              value={customerName} onChange={e => setCustomerName(e.target.value)}
+              placeholder="Ej: Juan García"
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+            />
+          </div>
 
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
           <button onClick={handleConfirm} disabled={loading}
@@ -1316,9 +1360,19 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
                   · {c.products?.name} ×{c.quantity}
                 </div>
               ))}
+              {i.note && (
+                <div style={{ fontSize: '12px', color: '#b45309', paddingLeft: '8px' }}>
+                  * {i.note}
+                </div>
+              )}
             </div>
           ))}
         </div>
+        {sale.customerName && (
+          <div style={{ fontSize: '13px', marginBottom: '4px' }}>
+            <span>Cliente: <strong>{sale.customerName}</strong></span>
+          </div>
+        )}
         {sale.discount > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '2px' }}>
             <span>Descuento</span><span>-{mxn(sale.discount)}</span>
@@ -1327,6 +1381,21 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '17px', fontWeight: '900', borderTop: '2px solid #000', paddingTop: '5px', marginTop: '4px' }}>
           <span>TOTAL</span><span>{mxn(sale.total)}</span>
         </div>
+        {(() => {
+          const iva     = sale.total * 16 / 116
+          const base    = sale.total - iva
+          return (
+            <div style={{ fontSize: '11px', color: '#666', marginTop: '4px', borderTop: '1px dashed #ccc', paddingTop: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Subtotal s/IVA</span><span>{mxn(base)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>IVA (16%)</span><span>{mxn(iva)}</span>
+              </div>
+              <p style={{ margin: '2px 0', fontSize: '10px' }}>* Precios con IVA incluido · Moneda Nacional</p>
+            </div>
+          )
+        })()}
         <div style={{ marginTop: '6px', fontSize: '13px' }}>
           <p style={{ margin: '2px 0' }}>Pago: {methodLabel[sale.payment_method]}</p>
           {sale.change > 0 && <p style={{ margin: '2px 0' }}>Cambio: {mxn(sale.change)}</p>}
@@ -1363,5 +1432,142 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
         */}
       </div>
     </>
+  )
+}
+
+// ─── Modal de Observaciones ───────────────────────────────────
+function NoteModal({ item, onConfirm, onClose }) {
+  const [recipeItems, setRecipeItems] = useState([])
+  const [removed,     setRemoved]     = useState(new Set())  // IDs de ingredientes a quitar
+  const [freeText,    setFreeText]    = useState('')
+  const [loading,     setLoading]     = useState(true)
+
+  // Cargar ingredientes de la receta del producto
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase
+        .from('recipe_items')
+        .select('id, quantity, unit, ingredients(name)')
+        .eq('product_id', item.id)
+      setRecipeItems(data ?? [])
+
+      // Pre-llenar con nota existente si había ingredientes marcados
+      if (item.note) {
+        // Intentar re-parsear nota existente (solo texto libre)
+        const parts  = item.note.split(' / ')
+        const sinPart = parts.find(p => p.startsWith('Sin: '))
+        const obsPart = parts.find(p => p.startsWith('Obs: '))
+        if (obsPart) setFreeText(obsPart.replace('Obs: ', ''))
+        if (sinPart && data?.length) {
+          const sinNames = sinPart.replace('Sin: ', '').split(', ')
+          const preRemoved = new Set(
+            (data ?? []).filter(r => sinNames.includes(r.ingredients?.name)).map(r => r.id)
+          )
+          setRemoved(preRemoved)
+        } else if (!sinPart && item.note) {
+          setFreeText(item.note)
+        }
+      }
+
+      setLoading(false)
+    }
+    load()
+  }, [item.id])
+
+  function toggleRemove(id) {
+    setRemoved(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function handleConfirm() {
+    const parts = []
+    if (removed.size > 0) {
+      const names = recipeItems.filter(r => removed.has(r.id)).map(r => r.ingredients?.name).filter(Boolean)
+      if (names.length) parts.push('Sin: ' + names.join(', '))
+    }
+    if (freeText.trim()) parts.push('Obs: ' + freeText.trim())
+    onConfirm(parts.join(' / ') || '')
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b">
+          <div>
+            <h2 className="font-bold text-gray-800">Observaciones</h2>
+            <p className="text-sm text-gray-500 mt-0.5">{item.name}</p>
+          </div>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Ingredientes de la receta */}
+          {loading ? (
+            <p className="text-center text-gray-400 text-sm py-4">Cargando ingredientes...</p>
+          ) : recipeItems.length > 0 ? (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                🥗 Quitar ingredientes
+              </p>
+              <div className="space-y-2">
+                {recipeItems.map(ri => {
+                  const isRemoved = removed.has(ri.id)
+                  return (
+                    <button
+                      key={ri.id}
+                      onClick={() => toggleRemove(ri.id)}
+                      className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border-2 text-sm transition-all ${
+                        isRemoved
+                          ? 'border-red-400 bg-red-50 text-red-700'
+                          : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                      }`}
+                    >
+                      <span className="font-medium">{ri.ingredients?.name}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${isRemoved ? 'bg-red-200 text-red-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {isRemoved ? 'Sin esto' : 'Con esto'}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400 text-center">Este producto no tiene receta definida</p>
+          )}
+
+          {/* Texto libre */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              📝 Observación libre
+            </p>
+            <textarea
+              value={freeText}
+              onChange={e => setFreeText(e.target.value)}
+              placeholder="Ej: extra picante, término medio, sin sal..."
+              rows={3}
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
+            />
+          </div>
+        </div>
+
+        <div className="p-5 border-t flex gap-3">
+          <button
+            onClick={() => { setRemoved(new Set()); setFreeText(''); onConfirm('') }}
+            className="flex-1 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-2.5 text-sm font-medium transition-colors"
+          >
+            Limpiar
+          </button>
+          <button
+            onClick={handleConfirm}
+            className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl py-2.5 text-sm transition-colors"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
