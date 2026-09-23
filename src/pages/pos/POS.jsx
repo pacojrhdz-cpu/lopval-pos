@@ -1278,30 +1278,31 @@ function openTicketWindow(sale) {
   <style>
     @page { size: 80mm auto; margin: 0; }
     * { box-sizing: border-box; }
-    body { font-family: 'Courier New', monospace; font-size: 13px; width: 76mm; margin: 0 auto; padding: 3mm 2mm; color: #000; background: #fff; }
+    body { font-family: Arial, sans-serif; font-size: 15px; font-weight: 700; width: 76mm; margin: 0 auto; padding: 3mm 2mm; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .center { text-align: center; }
-    .bold { font-weight: 900; }
-    .big { font-size: 17px; font-weight: 900; }
-    .small { font-size: 10px; color: #555; margin: 1px 0; }
-    .dash { border-top: 2px dashed #000; margin: 5px 0; }
-    .row { display: flex; justify-content: space-between; margin: 2px 0; }
-    .item { margin: 5px 0; border-bottom: 1px dashed #ccc; padding-bottom: 4px; }
-    .item-row { display: flex; justify-content: space-between; font-weight: 700; }
-    .mod { font-size: 11px; color: #555; padding-left: 6px; }
-    .obs { color: #b45309; }
-    .total-row { display: flex; justify-content: space-between; font-size: 17px; font-weight: 900; border-top: 2px solid #000; padding-top: 4px; margin-top: 3px; }
-    .iva { font-size: 11px; color: #666; margin-top: 4px; border-top: 1px dashed #ccc; padding-top: 3px; }
+    .big { font-size: 19px; font-weight: 900; letter-spacing: -0.3px; }
+    .sub { font-size: 12px; font-weight: 600; color: #222; margin: 1px 0; }
+    .dash { border-top: 2px dashed #000; margin: 6px 0; }
+    .row { display: flex; justify-content: space-between; margin: 3px 0; font-weight: 700; }
+    .item { margin: 6px 0; padding-bottom: 5px; border-bottom: 1px dashed #999; }
+    .item-row { display: flex; justify-content: space-between; font-size: 15px; font-weight: 900; }
+    .mod { font-size: 13px; font-weight: 600; color: #333; padding-left: 6px; }
+    .obs { color: #7c3a00; font-weight: 700; }
+    .total-row { display: flex; justify-content: space-between; font-size: 20px; font-weight: 900; border-top: 2px solid #000; padding-top: 5px; margin-top: 4px; }
+    .iva { font-size: 13px; font-weight: 600; color: #333; margin-top: 5px; border-top: 1px dashed #999; padding-top: 4px; }
+    .iva .row { font-size: 13px; }
+    .gracias { font-size: 14px; font-weight: 800; margin: 3px 0; }
     img { display: block; margin: 0 auto; }
   </style></head><body>
   <div class="center">
-    ${logo ? `<img src="${origin}${logo}" style="height:44px;object-fit:contain;margin-bottom:4px;">` : ''}
+    ${logo ? `<img src="${origin}${logo}" style="height:48px;object-fit:contain;margin-bottom:4px;">` : ''}
     <div class="big">${sale.branchName ?? 'Pizza & Totó'}</div>
-    <div class="small">Grupo Lopval</div>
-    ${info.address ? `<div class="small">${info.address}</div>` : ''}
-    ${info.phone   ? `<div class="small">Tel: ${info.phone}</div>` : ''}
-    <div class="small">${fecha} ${hora}</div>
-    ${sale.cashier      ? `<div class="small">Cajero: ${sale.cashier}</div>` : ''}
-    ${sale.customerName ? `<div class="small">Cliente: ${sale.customerName}</div>` : ''}
+    <div class="sub">Grupo Lopval</div>
+    ${info.address ? `<div class="sub">${info.address}</div>` : ''}
+    ${info.phone   ? `<div class="sub">Tel: ${info.phone}</div>` : ''}
+    <div class="sub">${fecha} &nbsp; ${hora}</div>
+    ${sale.cashier      ? `<div class="sub">Cajero: ${sale.cashier}</div>` : ''}
+    ${sale.customerName ? `<div class="sub">Cliente: ${sale.customerName}</div>` : ''}
   </div>
   <div class="dash"></div>
   ${itemRows}
@@ -1311,18 +1312,19 @@ function openTicketWindow(sale) {
   <div class="iva">
     <div class="row"><span>Subtotal s/IVA</span><span>${mxn(base)}</span></div>
     <div class="row"><span>IVA (16%)</span><span>${mxn(iva)}</span></div>
-    <div class="small">* Precios con IVA incluido · Moneda Nacional</div>
+    <div class="sub">* Precios con IVA incluido · Moneda Nacional</div>
   </div>
   <div class="dash"></div>
   <div class="row"><span>Pago:</span><span>${METHOD[sale.payment_method] ?? ''}</span></div>
   ${sale.change > 0 ? `<div class="row"><span>Cambio:</span><span>${mxn(sale.change)}</span></div>` : ''}
   <div class="center" style="margin-top:10px;">
-    <div>¡Gracias por su visita!</div><div>Vuelva pronto</div>
+    <div class="gracias">¡Gracias por su visita!</div>
+    <div class="gracias">Vuelva pronto</div>
   </div>
-  ${qr ? `<div class="center" style="margin-top:8px;border-top:1px dashed #ccc;padding-top:6px;">
-    <div class="small">¿Cómo fue tu experiencia? ¡Cuéntanos!</div>
-    <img src="${origin}${qr}" style="width:72px;height:72px;margin:4px auto;">
-    <div class="small">Escanea para calificarnos en Google</div>
+  ${qr ? `<div class="center" style="margin-top:8px;border-top:1px dashed #999;padding-top:6px;">
+    <div class="sub">¿Cómo fue tu experiencia? ¡Cuéntanos!</div>
+    <img src="${origin}${qr}" style="width:76px;height:76px;margin:4px auto;">
+    <div class="sub">Escanea para calificarnos en Google</div>
   </div>` : ''}
   </body></html>`
 
