@@ -1336,9 +1336,9 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
         </div>
         {(() => {
           const BRANCH_QR = {
-            'aaaaaaaa-0000-0000-0000-000000000001': '/qr-matilde.png',
-            'aaaaaaaa-0000-0000-0000-000000000003': '/qr-puebla.png',
-            'aaaaaaaa-0000-0000-0000-000000000004': '/qr-pachuca.png',
+            'aaaaaaaa-0000-0000-0000-000000000001': '/QR_Resena_Google_Matilde.png',
+            'aaaaaaaa-0000-0000-0000-000000000003': '/QR_Resena_Google_Puebla.png',
+            'aaaaaaaa-0000-0000-0000-000000000004': '/QR_Resena_Google_Pachuca.png',
           }
           const qr = BRANCH_QR[sale.branch_id]
           return qr ? (
