@@ -16,40 +16,26 @@
 .print-only { display: none; }
 
 @media print {
-  /* Ocultar toda la UI, mostrar solo el ticket */
-  .no-print  { display: none !important; }
-  .print-only { display: block !important; }
+  /* Ocultar TODO el body — solo mostrar el ticket */
+  body * { visibility: hidden !important; }
 
-  body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+  .print-only,
+  .print-only * { visibility: visible !important; }
 
   .print-only {
     display: block !important;
-    width: 72mm;
-    max-width: 72mm;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 72mm !important;
     font-family: Arial, Helvetica, sans-serif !important;
     font-size: 12px !important;
-    font-weight: bold !important;
     color: #000 !important;
     background: #fff !important;
-    padding: 2mm;
-    box-sizing: border-box;
+    padding: 2mm !important;
+    box-sizing: border-box !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-    margin: 0;
-  }
-
-  .print-only table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .print-only td {
-    font-family: Arial, Helvetica, sans-serif !important;
-    font-size: 12px !important;
-    font-weight: bold !important;
-    color: #000 !important;
-    padding: 1px 0;
-    vertical-align: top;
   }
 
   .print-only img {
