@@ -1242,15 +1242,12 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
   const methodLabel = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', plataforma: sale.platform_name }
   const now = new Date()
 
+  const branchInfo = BRANCH_INFO_PRINT[sale.branch_id]
+
   useEffect(() => {
-    const branchInfo = BRANCH_INFO_PRINT[sale.branch_id]
-    printTicket(sale, branchInfo).then(usedQZ => {
-      if (!usedQZ) {
-        // Fallback: impresión CSS si QZ Tray no está disponible
-        const timer = setTimeout(() => window.print(), 600)
-        return () => clearTimeout(timer)
-      }
-    })
+    // Intenta imprimir con JSPrintManager automáticamente
+    // Si falla, el cajero usa el botón "Reimprimir"
+    printTicket(sale, branchInfo)
   }, [])
 
   return (
@@ -1281,7 +1278,10 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
             </button>
             */}
             <div className="flex gap-2">
-              <button onClick={() => window.print()}
+              <button onClick={async () => {
+                const ok = await printTicket(sale, branchInfo)
+                if (!ok) window.print()
+              }}
                 className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl py-3 text-sm font-medium transition-colors">
                 <Printer className="w-4 h-4" /> Reimprimir
               </button>
