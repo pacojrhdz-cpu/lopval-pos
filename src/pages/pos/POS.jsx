@@ -41,6 +41,7 @@ export default function POS() {
   const [cmdSent,          setCmdSent]          = useState(false)
   const [pendingProduct,   setPendingProduct]   = useState(null)  // producto esperando selección de modificadores
   const [noteItem,         setNoteItem]         = useState(null)  // item del carrito en edición de notas
+  const [showRecientes,    setShowRecientes]    = useState(false)
 
   useEffect(() => {
     fetchCategories()
@@ -236,6 +237,7 @@ export default function POS() {
       cash_received:    paymentMethod === 'efectivo' ? cashReceived : null,
       change_given:     paymentMethod === 'efectivo' ? changeGiven  : null,
       payments:         payments ?? null,
+      customer_name:    customerName || null,
       status:           'completed',
     }).select().single()
 
@@ -256,9 +258,10 @@ export default function POS() {
 
     // Enviar comanda a cocina
     const horaVenta = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    const folio = `#${sale.id.slice(0, 6).toUpperCase()}`
     await supabase.from('kitchen_tickets').insert({
       branch_id:    activeBranch?.id ?? null,
-      ticket_label: `Mostrador · ${horaVenta}`,
+      ticket_label: `${folio} · ${horaVenta}${customerName ? ` · ${customerName}` : ''}`,
       items:        cart.map(i => ({ name: i.name, qty: i.qty, notes: buildItemNotes(i) })),
       source:       'pos',
       reference_id: sale.id,
@@ -392,8 +395,11 @@ export default function POS() {
         <div className="flex items-center gap-2 px-4 py-3 border-b">
           <ShoppingCart className="w-5 h-5 text-gray-700" />
           <h2 className="font-semibold text-gray-800">Orden actual</h2>
+          <button onClick={() => setShowRecientes(true)} title="Ventas recientes" className="ml-auto text-gray-400 hover:text-gray-700 transition-colors">
+            <Clock className="w-4 h-4" />
+          </button>
           {cart.length > 0 && (
-            <button onClick={clearCart} className="ml-auto text-gray-400 hover:text-gray-700 transition-colors">
+            <button onClick={clearCart} className="text-gray-400 hover:text-gray-700 transition-colors">
               <X className="w-4 h-4" />
             </button>
           )}
@@ -558,6 +564,12 @@ export default function POS() {
         />
       )}
       */}
+      {showRecientes && (
+        <RecientesModal
+          activeBranch={activeBranch}
+          onClose={() => setShowRecientes(false)}
+        />
+      )}
       {showCorte   && (
         <CorteModal
           cashRegister={cashRegister}
@@ -1308,6 +1320,7 @@ function openTicketWindow(sale) {
     ${info.address ? `<div class="sub">${info.address}</div>` : ''}
     ${info.phone   ? `<div class="sub">Tel: ${info.phone}</div>` : ''}
     <div class="sub">${fecha} &nbsp; ${hora}</div>
+    ${sale.id           ? `<div class="sub" style="font-weight:900;font-size:14px;">Folio: #${sale.id.slice(0,6).toUpperCase()}</div>` : ''}
     ${sale.cashier      ? `<div class="sub">Cajero: ${sale.cashier}</div>` : ''}
     ${sale.customerName ? `<div class="sub">Cliente: ${sale.customerName}</div>` : ''}
   </div>
@@ -1401,6 +1414,86 @@ function SuccessModal({ sale, onClose, onRequestInvoice }) {
       </div>
 
     </>
+  )
+}
+
+// ─── Modal de Ventas Recientes ────────────────────────────────
+function RecientesModal({ activeBranch, onClose }) {
+  const [sales,   setSales]   = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase
+      .from('sales')
+      .select('id, created_at, total, payment_method, platform_name, cashier_name, branch_name, branch_id, change_given, customer_name, sale_items(product_name, quantity, unit_price)')
+      .eq('branch_id', activeBranch?.id)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(25)
+      .then(({ data }) => { setSales(data ?? []); setLoading(false) })
+  }, [])
+
+  function reprintSale(sale) {
+    const saleObj = {
+      ...sale,
+      items: (sale.sale_items ?? []).map(si => ({
+        name: si.product_name, qty: si.quantity, price: si.unit_price,
+        mods: [], comboItems: [], note: '',
+      })),
+      change:       sale.change_given,
+      cashier:      sale.cashier_name,
+      branchName:   sale.branch_name,
+      customerName: sale.customer_name,
+    }
+    const branchInfo = BRANCH_INFO_PRINT[sale.branch_id]
+    printTicket(saleObj, branchInfo).then(ok => { if (!ok) openTicketWindow(saleObj) })
+  }
+
+  const PAGO = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transfer.', plataforma: 'Plataforma', mixto: 'Mixto' }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b">
+          <h2 className="font-bold text-gray-800 flex items-center gap-2">
+            <Clock className="w-5 h-5" /> Ventas recientes
+          </h2>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {loading ? (
+            <p className="text-center text-gray-400 py-10 animate-pulse">Cargando...</p>
+          ) : sales.length === 0 ? (
+            <p className="text-center text-gray-400 py-10">Sin ventas registradas</p>
+          ) : sales.map(sale => (
+            <div key={sale.id} className="bg-gray-50 rounded-xl p-3 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-mono bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-bold">
+                    #{sale.id.slice(0,6).toUpperCase()}
+                  </span>
+                  {sale.customer_name && (
+                    <span className="text-xs text-blue-600 font-medium truncate">{sale.customer_name}</span>
+                  )}
+                </div>
+                <p className="font-bold text-gray-900 mt-0.5">{mxn(sale.total)}</p>
+                <p className="text-xs text-gray-400">
+                  {new Date(sale.created_at).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}
+                  {' · '}{PAGO[sale.payment_method] ?? sale.payment_method}
+                  {sale.platform_name ? ` · ${sale.platform_name}` : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => reprintSale(sale)}
+                className="flex-shrink-0 flex items-center gap-1.5 border border-gray-200 text-gray-600 hover:bg-white rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors"
+              >
+                <Printer className="w-3 h-3" /> Reimprimir
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 
