@@ -188,26 +188,31 @@ export default function POS() {
       const combo = i.comboItems?.length
         ? i.comboItems.map(c => `<div class="item-mod">· ${c.products?.name} ×${c.quantity}</div>`).join('')
         : ''
-      return `<div style="margin:8px 0;border-bottom:1px dashed #ccc;padding-bottom:8px">
-        <div style="display:flex;justify-content:space-between">
+      const note  = i.note ? `<div class="item-mod obs">* ${i.note}</div>` : ''
+      return `<div class="item-block">
+        <div class="item-row">
           <span class="item-name">${i.name}</span><span class="item-qty">×${i.qty}</span>
-        </div>${mods}${combo}</div>`
+        </div>${mods}${combo}${note}</div>`
     }).join('')
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Orden</title>
     <style>
-      body{font-family:'Courier New',monospace;font-size:15px;max-width:320px;margin:0 auto;padding:16px;-webkit-print-color-adjust:exact}
-      h2{text-align:center;font-size:18px;font-weight:900;margin:0 0 2px}
-      .sub{text-align:center;font-size:12px;color:#444;margin:2px 0}
-      .divider{border-top:2px dashed #000;margin:8px 0}
-      .item-name{font-size:15px;font-weight:700}
-      .item-qty{font-size:15px;font-weight:700}
-      .item-mod{font-size:13px;color:#444;margin-left:8px}
-      .total-row{font-size:18px;font-weight:900}
+      @page { size: 80mm auto; margin: 0; }
+      * { box-sizing: border-box; }
+      body { font-family: Arial, sans-serif; font-size: 15px; font-weight: 700; width: 76mm; margin: 0 auto; padding: 3mm 2mm; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      h2 { text-align: center; font-size: 20px; font-weight: 900; margin: 2px 0; }
+      .sub { text-align: center; font-size: 13px; font-weight: 600; color: #222; margin: 2px 0; }
+      .divider { border-top: 2px dashed #000; margin: 7px 0; }
+      .item-block { margin: 7px 0; border-bottom: 1px dashed #999; padding-bottom: 6px; }
+      .item-row { display: flex; justify-content: space-between; }
+      .item-name { font-size: 16px; font-weight: 900; }
+      .item-qty  { font-size: 16px; font-weight: 900; }
+      .item-mod  { font-size: 13px; font-weight: 600; color: #333; margin-left: 8px; }
+      .obs       { color: #7c3a00; font-weight: 700; }
+      .total-row { display: flex; justify-content: space-between; font-size: 20px; font-weight: 900; }
     </style></head><body>
-    ${logoTag}<h2>${branch}</h2><p class="sub">Orden · ${hora}</p>
+    ${logoTag}<h2>${branch}</h2><p class="sub">Orden &bull; ${hora}</p>
     <div class="divider"></div>${rows}<div class="divider"></div>
-    <div style="display:flex;justify-content:space-between" class="total-row">
-      <span>Total</span><span>$${total.toFixed(2)}</span></div>
+    <div class="total-row"><span>Total</span><span>$${total.toFixed(2)}</span></div>
     </body></html>`
     const w = window.open('', '_blank', 'width=400,height=600')
     w.document.write(html); w.document.close(); w.focus()
@@ -1281,17 +1286,17 @@ function openTicketWindow(sale) {
     body { font-family: Arial, sans-serif; font-size: 15px; font-weight: 700; width: 76mm; margin: 0 auto; padding: 3mm 2mm; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .center { text-align: center; }
     .big { font-size: 19px; font-weight: 900; letter-spacing: -0.3px; }
-    .sub { font-size: 12px; font-weight: 600; color: #222; margin: 1px 0; }
+    .sub { font-size: 13px; font-weight: 700; color: #111; margin: 2px 0; }
     .dash { border-top: 2px dashed #000; margin: 6px 0; }
-    .row { display: flex; justify-content: space-between; margin: 3px 0; font-weight: 700; }
+    .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: 14px; font-weight: 700; }
     .item { margin: 6px 0; padding-bottom: 5px; border-bottom: 1px dashed #999; }
-    .item-row { display: flex; justify-content: space-between; font-size: 15px; font-weight: 900; }
-    .mod { font-size: 13px; font-weight: 600; color: #333; padding-left: 6px; }
-    .obs { color: #7c3a00; font-weight: 700; }
-    .total-row { display: flex; justify-content: space-between; font-size: 20px; font-weight: 900; border-top: 2px solid #000; padding-top: 5px; margin-top: 4px; }
-    .iva { font-size: 13px; font-weight: 600; color: #333; margin-top: 5px; border-top: 1px dashed #999; padding-top: 4px; }
-    .iva .row { font-size: 13px; }
-    .gracias { font-size: 14px; font-weight: 800; margin: 3px 0; }
+    .item-row { display: flex; justify-content: space-between; font-size: 16px; font-weight: 900; }
+    .mod { font-size: 14px; font-weight: 700; color: #222; padding-left: 6px; }
+    .obs { color: #7c3a00; font-weight: 800; }
+    .total-row { display: flex; justify-content: space-between; font-size: 21px; font-weight: 900; border-top: 2px solid #000; padding-top: 5px; margin-top: 4px; }
+    .iva { font-size: 13px; font-weight: 700; color: #222; margin-top: 5px; border-top: 1px dashed #999; padding-top: 4px; }
+    .iva .row { font-size: 13px; font-weight: 700; }
+    .gracias { font-size: 15px; font-weight: 800; margin: 3px 0; }
     img { display: block; margin: 0 auto; }
   </style></head><body>
   <div class="center">
