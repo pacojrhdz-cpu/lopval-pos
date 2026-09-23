@@ -206,8 +206,8 @@ export default function POS() {
       .item-row { display: flex; justify-content: space-between; }
       .item-name { font-size: 16px; font-weight: 900; }
       .item-qty  { font-size: 16px; font-weight: 900; }
-      .item-mod  { font-size: 13px; font-weight: 600; color: #333; margin-left: 8px; }
-      .obs       { color: #7c3a00; font-weight: 700; }
+      .item-mod  { font-size: 14px; font-weight: 800; color: #222; margin-left: 8px; }
+      .obs       { color: #7c3a00; font-weight: 900; font-size: 14px; }
       .total-row { display: flex; justify-content: space-between; font-size: 20px; font-weight: 900; }
     </style></head><body>
     ${logoTag}<h2>${branch}</h2><p class="sub">Orden &bull; ${hora}</p>
@@ -865,12 +865,14 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Corte de Caja</title>
     <style>
-      body { font-family: 'Courier New', monospace; font-size: 14px; max-width: 320px; margin: 0 auto; padding: 16px; -webkit-print-color-adjust: exact; }
-      h2 { text-align: center; font-size: 18px; font-weight: 900; margin: 0 0 4px; }
-      .sub { text-align: center; font-size: 12px; color: #444; margin: 2px 0; }
-      .divider { border-top: 2px dashed #000; margin: 8px 0; }
-      .row { display: flex; justify-content: space-between; margin: 4px 0; font-size: 14px; }
-      .bold { font-weight: 800; font-size: 15px; }
+      @page { size: 80mm auto; margin: 0; }
+      * { box-sizing: border-box; }
+      body { font-family: Arial, sans-serif; font-size: 14px; font-weight: 700; width: 76mm; margin: 0 auto; padding: 3mm 2mm; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      h2 { text-align: center; font-size: 19px; font-weight: 900; margin: 0 0 4px; }
+      .sub { text-align: center; font-size: 13px; font-weight: 700; color: #111; margin: 2px 0; }
+      .divider { border-top: 2px dashed #000; margin: 7px 0; }
+      .row { display: flex; justify-content: space-between; margin: 4px 0; font-size: 14px; font-weight: 700; }
+      .bold { font-weight: 900; font-size: 15px; }
       .diff-ok { color: green; } .diff-neg { color: red; } .diff-pos { color: #b45309; }
     </style></head><body>
     ${logoTag}
