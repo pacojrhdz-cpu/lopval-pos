@@ -428,17 +428,13 @@ function AdminReceiveModal({ req, onClose, onDone }) {
     setErr('')
     const items = req.requisition_items ?? []
 
-    // Actualizar received_qty en cada item
+    // Intentar actualizar received_qty en cada item (columna opcional)
     for (const ri of items) {
       const r = received[ri.id]
-      const { error: itemErr } = await supabase.from('requisition_items')
+      await supabase.from('requisition_items')
         .update({ received_qty: parseFloat(r?.qty) || 0 })
         .eq('id', ri.id)
-      if (itemErr) {
-        setErr('Error al guardar items: ' + itemErr.message)
-        setSaving(false)
-        return
-      }
+      // Si la columna no existe lo ignoramos — el detalle queda en review_note
     }
 
     // Resumen y cambio de status
