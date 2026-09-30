@@ -199,7 +199,7 @@ export default function POS() {
     <style>
       @page { size: 80mm auto; margin: 0; }
       * { box-sizing: border-box; }
-      body { font-family: Arial, sans-serif; font-size: 15px; font-weight: 700; width: 76mm; margin: 0 auto; padding: 3mm 2mm; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { font-family: Arial, sans-serif; font-size: 14px; font-weight: 700; width: 72mm; margin: 0 auto; padding: 2mm 1mm; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       h2 { text-align: center; font-size: 20px; font-weight: 900; margin: 2px 0; }
       .sub { text-align: center; font-size: 13px; font-weight: 600; color: #222; margin: 2px 0; }
       .divider { border-top: 2px dashed #000; margin: 7px 0; }
@@ -1251,10 +1251,11 @@ function PaymentModal({ total, onClose, onComplete }) {
 
 // ─── Modal de Éxito + Ticket ──────────────────────────────────
 const BRANCH_INFO_PRINT = {
-  'aaaaaaaa-0000-0000-0000-000000000001': { address: 'Santa Matilde, Privadas Santa Matilde, Hgo.' },
-  'aaaaaaaa-0000-0000-0000-000000000002': { address: 'La Cintal 30, Fovissste III, Tuxtla Gutiérrez, Chis.', phone: '961 386 3750' },
-  'aaaaaaaa-0000-0000-0000-000000000003': { address: 'Calle Ignacio Allende, Santiago Momoxpan, San Andrés Cholula, Pue.' },
-  'aaaaaaaa-0000-0000-0000-000000000004': { address: 'Av. La Principal, San Antonio, Pachuca de Soto, Hgo.' },
+  'aaaaaaaa-0000-0000-0000-000000000001': { address: 'Santa Matilde, Privadas Santa Matilde, Hgo.', group_name: 'Grupo Lopval' },
+  'aaaaaaaa-0000-0000-0000-000000000002': { address: 'La Cintal 30, Fovissste III, Tuxtla Gutiérrez, Chis.', phone: '961 386 3750', group_name: 'Grupo Lopval' },
+  'aaaaaaaa-0000-0000-0000-000000000003': { address: 'Calle Ignacio Allende, Santiago Momoxpan, San Andrés Cholula, Pue.', group_name: 'Grupo Lopval' },
+  'aaaaaaaa-0000-0000-0000-000000000004': { address: 'Av. La Principal, San Antonio, Pachuca de Soto, Hgo.', group_name: 'Grupo Lopval' },
+  'aaaaaaaa-0000-0000-0000-000000000005': { address: 'La Alameda, 43330, Eloxochitlán, Hgo.', phone: '77 1209 0010 · 55 2687 5512' },
 }
 
 const BRANCH_LOGOS = {
@@ -1279,6 +1280,8 @@ function openTicketWindow(sale) {
   const qr     = BRANCH_QR[sale.branch_id]
   const origin = window.location.origin
   const mxn    = n => `$${Number(n ?? 0).toFixed(2)}`
+  // Si el cajero es un email, muestra solo la parte antes del @
+  const cajero = sale.cashier?.includes('@') ? sale.cashier.split('@')[0] : sale.cashier
   const iva    = (sale.total ?? 0) * 16 / 116
   const base   = (sale.total ?? 0) - iva
   const METHOD = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', plataforma: sale.platform_name ?? 'Plataforma', mixto: 'Mixto' }
@@ -1297,9 +1300,9 @@ function openTicketWindow(sale) {
   <style>
     @page { size: 80mm auto; margin: 0; }
     * { box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; font-size: 15px; font-weight: 700; width: 76mm; margin: 0 auto; padding: 3mm 2mm; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-family: Arial, sans-serif; font-size: 14px; font-weight: 700; width: 72mm; margin: 0 auto; padding: 2mm 1mm; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .center { text-align: center; }
-    .big { font-size: 19px; font-weight: 900; letter-spacing: -0.3px; }
+    .big { font-size: 18px; font-weight: 900; letter-spacing: -0.3px; }
     .sub { font-size: 13px; font-weight: 700; color: #111; margin: 2px 0; }
     .dash { border-top: 2px dashed #000; margin: 6px 0; }
     .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: 14px; font-weight: 700; }
@@ -1316,12 +1319,12 @@ function openTicketWindow(sale) {
   <div class="center">
     ${logo ? `<img src="${origin}${logo}" style="height:48px;object-fit:contain;margin-bottom:4px;">` : ''}
     <div class="big">${sale.branchName ?? 'Pizza & Totó'}</div>
-    <div class="sub">Grupo Lopval</div>
+    ${info.group_name ? `<div class="sub">${info.group_name}</div>` : ''}
     ${info.address ? `<div class="sub">${info.address}</div>` : ''}
     ${info.phone   ? `<div class="sub">Tel: ${info.phone}</div>` : ''}
     <div class="sub">${fecha} &nbsp; ${hora}</div>
     ${sale.id           ? `<div class="sub" style="font-weight:900;font-size:14px;">Folio: #${sale.id.slice(0,6).toUpperCase()}</div>` : ''}
-    ${sale.cashier      ? `<div class="sub">Cajero: ${sale.cashier}</div>` : ''}
+    ${cajero            ? `<div class="sub">Cajero: ${cajero}</div>` : ''}
     ${sale.customerName ? `<div class="sub">Cliente: ${sale.customerName}</div>` : ''}
   </div>
   <div class="dash"></div>
