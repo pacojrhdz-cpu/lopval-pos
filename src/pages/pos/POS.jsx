@@ -625,9 +625,22 @@ function ModifierModal({ product, onClose, onConfirm }) {
     })
   })
 
+  // "Tipo de pasta" es condicional: visible solo si eligieron pasta (no ensalada)
+  // Cuando aparece condicionalmente, se trata como opcional aunque la BD diga required
+  const isPastaTypeGroup = g => g.name?.toLowerCase().includes('tipo de pasta')
+
   function isGroupVisible(g) {
-    if (ensaladaSelected && g.name?.toLowerCase().includes('tipo de pasta')) return false
+    if (ensaladaSelected && isPastaTypeGroup(g)) return false
     return true
+  }
+
+  function isGroupRequired(g) {
+    // Si hay un selector pasta/ensalada y el grupo es "tipo de pasta", es opcional
+    const hasPastaEnsaladaGroup = groups.some(x =>
+      x.name?.toLowerCase().includes('pasta') && x.name?.toLowerCase().includes('ensalada')
+    )
+    if (hasPastaEnsaladaGroup && isPastaTypeGroup(g)) return false
+    return g.required
   }
 
   function toggle(group, mod) {
@@ -655,7 +668,7 @@ function ModifierModal({ product, onClose, onConfirm }) {
     for (const g of groups) {
       if (!isGroupVisible(g)) continue  // saltar grupos ocultos
       const selIds = selected[g.id] ?? new Set()
-      if (g.required && selIds.size === 0) {
+      if (isGroupRequired(g) && selIds.size === 0) {
         alert(`Debes elegir una opción en "${g.name}"`)
         return
       }
@@ -704,7 +717,7 @@ function ModifierModal({ product, onClose, onConfirm }) {
                 <div key={g.id}>
                   <div className="flex items-center gap-2 mb-2">
                     <p className="text-sm font-semibold text-gray-800">{g.name}</p>
-                    {g.required
+                    {isGroupRequired(g)
                       ? <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">Obligatorio</span>
                       : <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">Opcional</span>}
                     {g.multi_select && <span className="text-xs text-gray-400">· Varios</span>}
