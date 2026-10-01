@@ -615,6 +615,21 @@ function ModifierModal({ product, onClose, onConfirm }) {
     load()
   }, [product.id])
 
+  // Si el cliente eligió "Ensalada" en el grupo pasta/ensalada, ocultar "Tipo de pasta"
+  const ensaladaSelected = groups.some(g => {
+    if (!(g.name?.toLowerCase().includes('pasta') && g.name?.toLowerCase().includes('ensalada'))) return false
+    const selIds = selected[g.id] ?? new Set()
+    return [...selIds].some(id => {
+      const mod = g.modifiers?.find(m => m.id === id)
+      return mod?.name?.toLowerCase().includes('ensalada')
+    })
+  })
+
+  function isGroupVisible(g) {
+    if (ensaladaSelected && g.name?.toLowerCase().includes('tipo de pasta')) return false
+    return true
+  }
+
   function toggle(group, mod) {
     setSelected(prev => {
       const cur = new Set(prev[group.id] ?? [])
@@ -638,6 +653,7 @@ function ModifierModal({ product, onClose, onConfirm }) {
   function handleConfirm() {
     const allMods = []
     for (const g of groups) {
+      if (!isGroupVisible(g)) continue  // saltar grupos ocultos
       const selIds = selected[g.id] ?? new Set()
       if (g.required && selIds.size === 0) {
         alert(`Debes elegir una opción en "${g.name}"`)
@@ -684,7 +700,7 @@ function ModifierModal({ product, onClose, onConfirm }) {
                   </div>
                 </div>
               )}
-              {groups.map(g => (
+              {groups.filter(isGroupVisible).map(g => (
                 <div key={g.id}>
                   <div className="flex items-center gap-2 mb-2">
                     <p className="text-sm font-semibold text-gray-800">{g.name}</p>
