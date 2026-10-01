@@ -7,25 +7,34 @@ import { Plus, Pencil, Trash2, X, Check, Search } from 'lucide-react'
 const EMPTY_PRODUCT = { name: '', description: '', category_id: '', price: '', active: true }
 
 export default function Products() {
-  const { activeBranch } = useAuth()
-  const [products,    setProducts]   = useState([])
-  const [categories,  setCategories] = useState([])
-  const [loading,     setLoading]    = useState(true)
-  const [search,      setSearch]     = useState('')
-  const [editing,     setEditing]    = useState(null)
-  const [form,        setForm]       = useState(EMPTY_PRODUCT)
-  const [saving,      setSaving]     = useState(false)
-  const [error,       setError]      = useState('')
+  const { activeBranch, isAdmin } = useAuth()
+  const [products,      setProducts]     = useState([])
+  const [categories,    setCategories]   = useState([])
+  const [branches,      setBranches]     = useState([])
+  const [filterBranch,  setFilterBranch] = useState(activeBranch?.id ?? '')
+  const [loading,       setLoading]      = useState(true)
+  const [search,        setSearch]       = useState('')
+  const [editing,       setEditing]      = useState(null)
+  const [form,          setForm]         = useState(EMPTY_PRODUCT)
+  const [saving,        setSaving]       = useState(false)
+  const [error,         setError]        = useState('')
 
-  useEffect(() => { fetchAll() }, [activeBranch])
+  useEffect(() => {
+    if (isAdmin) {
+      supabase.from('branches').select('id,name').eq('active', true).order('name')
+        .then(({ data }) => setBranches(data ?? []))
+    }
+  }, [isAdmin])
+
+  useEffect(() => { fetchAll() }, [filterBranch])
 
   async function fetchAll() {
     setLoading(true)
-    const branchId = activeBranch?.id
+    const branchId = filterBranch || null
     const [{ data: p }, { data: c }] = await Promise.all([
       branchId
-        ? supabase.from('products').select('*, categories(name,icon)').eq('branch_id', branchId).order('name')
-        : supabase.from('products').select('*, categories(name,icon)').order('name'),
+        ? supabase.from('products').select('*, categories(name,icon), branches(name)').eq('branch_id', branchId).order('name')
+        : supabase.from('products').select('*, categories(name,icon), branches(name)').order('name'),
       branchId
         ? supabase.from('categories').select('*').eq('active', true).eq('branch_id', branchId).order('sort_order')
         : supabase.from('categories').select('*').eq('active', true).order('sort_order'),
@@ -66,7 +75,7 @@ export default function Products() {
       price:       parseFloat(form.price),
       active:      form.active,
       updated_at:  new Date().toISOString(),
-      ...(editing === 'new' && activeBranch?.id ? { branch_id: activeBranch.id } : {}),
+      ...(editing === 'new' && (filterBranch || activeBranch?.id) ? { branch_id: filterBranch || activeBranch.id } : {}),
     }
 
     let err
@@ -107,13 +116,22 @@ export default function Products() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Productos</h1>
-          {activeBranch && <p className="text-sm text-gray-500 mt-0.5">{activeBranch.name}</p>}
+          {!filterBranch && isAdmin && <p className="text-sm text-gray-500 mt-0.5">Todas las sucursales</p>}
         </div>
         <button onClick={openNew}
           className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm transition-colors">
           <Plus className="w-4 h-4" /> Nuevo producto
         </button>
       </div>
+
+      {/* Filtro de sucursal (solo admin) */}
+      {isAdmin && branches.length > 0 && (
+        <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)}
+          className="w-full bg-white border rounded-xl shadow-sm text-sm px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-red-400">
+          <option value="">Todas las sucursales</option>
+          {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+      )}
 
       {/* Búsqueda */}
       <div className="relative">
@@ -131,7 +149,7 @@ export default function Products() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
-                {['Producto','Categoría','Precio','Estado',''].map(h => (
+                {['Producto', ...(!filterBranch && isAdmin ? ['Sucursal'] : []), 'Categoría','Precio','Estado',''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs text-gray-500 font-medium">{h}</th>
                 ))}
               </tr>
@@ -143,6 +161,9 @@ export default function Products() {
                     <p className="font-medium text-gray-800">{p.name}</p>
                     {p.description && <p className="text-xs text-gray-400 truncate max-w-xs">{p.description}</p>}
                   </td>
+                  {!filterBranch && isAdmin && (
+                    <td className="px-4 py-3 text-xs text-gray-500">{p.branches?.name ?? '—'}</td>
+                  )}
                   <td className="px-4 py-3 text-gray-600">
                     {p.categories ? `${p.categories.icon} ${p.categories.name}` : '—'}
                   </td>
