@@ -28,6 +28,8 @@ export default function POS() {
   const [selCat,           setSelCat]           = useState('Todos')
   const [search,           setSearch]           = useState('')
   const [cart,             setCart]             = useState([])
+  const [takeout,          setTakeout]          = useState(false)
+  const [packagingIds,     setPackagingIds]     = useState({})
   const [discount,         setDiscount]         = useState('')
   const [discReason,       setDiscReason]       = useState('')
   const [showPayment,      setShowPayment]      = useState(false)
@@ -101,6 +103,37 @@ export default function POS() {
   async function fetchRecentSales() {
     const { data } = await supabase.from('sales').select('id,created_at,total,payment_method').order('created_at', { ascending: false }).limit(5)
     setRecentSales(data ?? [])
+  }
+
+  // Carga IDs de ingredientes de empaque pizza (plato / caja)
+  useEffect(() => {
+    supabase.from('ingredients')
+      .select('id, name')
+      .in('name', ['Plato cartón No. 7', 'Caja pizza 14"', 'Plato individual pizza'])
+      .then(({ data }) => {
+        const ids = {}
+        for (const ing of data ?? []) ids[ing.name] = ing.id
+        setPackagingIds(ids)
+      })
+  }, [])
+
+  // Cuenta pizzas grandes e individuales en el carrito para descontar empaque
+  function countPizzaPackaging(cartItems) {
+    let large = 0, individual = 0
+    for (const item of cartItems) {
+      const cat  = item.categories?.name ?? ''
+      const name = item.name ?? ''
+      if (cat === 'Pizzas') {
+        if (/individual/i.test(name)) individual += item.qty
+        else                          large      += item.qty
+      } else if (cat === 'Paquetes') {
+        // Familiar 2 y Promoción llevan 2 pizzas; el resto 1
+        if (/familiar\s*2|promoci[oó]n/i.test(name)) large += 2 * item.qty
+        else if (/familiar|paquete pizza/i.test(name)) large += 1 * item.qty
+        // Paquete Pasta: sin pizza grande
+      }
+    }
+    return { large, individual }
   }
 
   const filtered = products.filter(p => {
@@ -238,6 +271,7 @@ export default function POS() {
       change_given:     paymentMethod === 'efectivo' ? changeGiven  : null,
       payments:         payments ?? null,
       customer_name:    customerName || null,
+      takeout:          takeout,
       status:           'completed',
     }).select().single()
 
@@ -256,12 +290,39 @@ export default function POS() {
       }))
     )
 
+    // Descontar empaques de pizza del inventario
+    try {
+      const branchId = activeBranch?.id
+      if (branchId && Object.keys(packagingIds).length > 0) {
+        const { large, individual } = countPizzaPackaging(cart)
+        const largeKey = takeout ? 'Caja pizza 14"' : 'Plato cartón No. 7'
+        const indKey   = 'Plato individual pizza'
+
+        if (large > 0 && packagingIds[largeKey]) {
+          await supabase.rpc('update_stock', {
+            p_branch_id:     branchId,
+            p_ingredient_id: packagingIds[largeKey],
+            p_delta:         -large,
+          })
+        }
+        if (individual > 0 && packagingIds[indKey]) {
+          await supabase.rpc('update_stock', {
+            p_branch_id:     branchId,
+            p_ingredient_id: packagingIds[indKey],
+            p_delta:         -individual,
+          })
+        }
+      }
+    } catch (pkgErr) {
+      console.warn('Error descontando empaque:', pkgErr)
+    }
+
     // Enviar comanda a cocina
     const horaVenta = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
     const folio = `#${sale.id.slice(0, 6).toUpperCase()}`
     await supabase.from('kitchen_tickets').insert({
       branch_id:    activeBranch?.id ?? null,
-      ticket_label: `${folio} · ${horaVenta}${customerName ? ` · ${customerName}` : ''}`,
+      ticket_label: `${folio} · ${horaVenta}${customerName ? ` · ${customerName}` : ''}${takeout ? ' 🥡' : ''}`,
       items:        cart.map(i => ({ name: i.name, qty: i.qty, notes: buildItemNotes(i) })),
       source:       'pos',
       reference_id: sale.id,
@@ -269,6 +330,7 @@ export default function POS() {
 
     setLastSale({ ...sale, items: cart, change: changeGiven, cashier: profile?.name ?? 'Cajero', branchName: activeBranch?.name, customerName })
     clearCart()
+    setTakeout(false)
     setShowPayment(false)
     fetchRecentSales()
   }
@@ -403,6 +465,21 @@ export default function POS() {
               <X className="w-4 h-4" />
             </button>
           )}
+        </div>
+
+        {/* Toggle Para llevar / Para comer aquí */}
+        <div className="px-3 py-2 border-b bg-gray-50">
+          <button
+            onClick={() => setTakeout(v => !v)}
+            className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all ${
+              takeout
+                ? 'bg-orange-500 text-white shadow-sm'
+                : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-400'
+            }`}
+          >
+            <span>{takeout ? '🥡' : '🍽️'}</span>
+            <span>{takeout ? 'Para llevar' : 'Para comer aquí'}</span>
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
