@@ -413,6 +413,31 @@ export default function POS() {
           </button>
         </div>
 
+        {/* ⚠️ Alerta de turno abierto desde día anterior */}
+        {(() => {
+          if (!cashRegister?.opening_at) return null
+          const openDay = new Date(cashRegister.opening_at).toDateString()
+          const today   = new Date().toDateString()
+          if (openDay === today) return null
+          const openFmt = new Date(cashRegister.opening_at).toLocaleString('es-MX', {
+            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+          })
+          return (
+            <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border-b border-red-300 text-red-700 text-xs font-semibold">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-red-600" />
+              <span className="flex-1">
+                ⚠️ El turno lleva abierto desde <b>{openFmt}</b> — cierra el corte antes de continuar
+              </span>
+              <button
+                onClick={() => setShowCorte(true)}
+                className="ml-2 px-2 py-0.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-xs font-bold"
+              >
+                Ir al Corte
+              </button>
+            </div>
+          )
+        })()}
+
         {/* Alerta de insumos bajos */}
         {showLowStock && lowStockItems.length > 0 && (
           <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-700 text-xs">
@@ -740,8 +765,9 @@ function ModifierModal({ product, onClose, onConfirm }) {
   // Si el cliente eligió "Ensalada" en el grupo pasta/ensalada, ocultar "Tipo de pasta"
   const ensaladaSelected = groups.some(g => {
     if (!(g.name?.toLowerCase().includes('pasta') && g.name?.toLowerCase().includes('ensalada'))) return false
-    const selIds = selected[g.id] ?? new Set()
-    return [...selIds].some(id => {
+    const counts = selected[g.id] ?? {}
+    return Object.entries(counts).some(([id, n]) => {
+      if (n <= 0) return false
       const mod = g.modifiers?.find(m => m.id === id)
       return mod?.name?.toLowerCase().includes('ensalada')
     })
@@ -765,14 +791,32 @@ function ModifierModal({ product, onClose, onConfirm }) {
     return g.required
   }
 
+  // selected: { [groupId]: { [modId]: count } }
+  // Para grupos multi_select se permite repetir el mismo sabor hasta max_selections
+
   function toggle(group, mod) {
     setSelected(prev => {
-      const cur = new Set(prev[group.id] ?? [])
+      const cur = { ...(prev[group.id] ?? {}) }
       if (group.multi_select) {
-        cur.has(mod.id) ? cur.delete(mod.id) : cur.add(mod.id)
+        const total = Object.values(cur).reduce((s, n) => s + n, 0)
+        const max   = group.max_selections ?? 99
+        if (total < max) {
+          cur[mod.id] = (cur[mod.id] ?? 0) + 1
+        }
       } else {
-        cur.clear(); cur.add(mod.id)
+        // single: toggle este — si ya está seleccionado, deselecciona
+        const already = (cur[mod.id] ?? 0) > 0
+        Object.keys(cur).forEach(k => { cur[k] = 0 })
+        if (!already) cur[mod.id] = 1
       }
+      return { ...prev, [group.id]: cur }
+    })
+  }
+
+  function decrement(group, mod) {
+    setSelected(prev => {
+      const cur = { ...(prev[group.id] ?? {}) }
+      cur[mod.id] = Math.max(0, (cur[mod.id] ?? 0) - 1)
       return { ...prev, [group.id]: cur }
     })
   }
@@ -788,23 +832,26 @@ function ModifierModal({ product, onClose, onConfirm }) {
   function handleConfirm() {
     const allMods = []
     for (const g of groups) {
-      if (!isGroupVisible(g)) continue  // saltar grupos ocultos
-      const selIds = selected[g.id] ?? new Set()
-      if (isGroupRequired(g) && selIds.size === 0) {
+      if (!isGroupVisible(g)) continue
+      const counts   = selected[g.id] ?? {}
+      const totalSel = Object.values(counts).reduce((s, n) => s + n, 0)
+      if (isGroupRequired(g) && totalSel === 0) {
         alert(`Debes elegir una opción en "${g.name}"`)
         return
       }
-      for (const id of selIds) {
+      for (const [id, count] of Object.entries(counts)) {
         const mod = getModObj(id)
-        if (mod) allMods.push(mod)
+        if (mod && count > 0) {
+          for (let i = 0; i < count; i++) allMods.push(mod)
+        }
       }
     }
     onConfirm(allMods, comboItems)
   }
 
   const extraTotal = Object.values(selected)
-    .flatMap(s => [...s])
-    .reduce((sum, id) => sum + Number(getModObj(id)?.price_extra ?? 0), 0)
+    .flatMap(counts => Object.entries(counts ?? {}).map(([id, n]) => n * Number(getModObj(id)?.price_extra ?? 0)))
+    .reduce((s, n) => s + n, 0)
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
@@ -846,7 +893,51 @@ function ModifierModal({ product, onClose, onConfirm }) {
                   </div>
                   <div className="space-y-2">
                     {(g.modifiers ?? []).filter(m => m.active).sort((a, b) => a.sort_order - b.sort_order).map(mod => {
-                      const sel = selected[g.id]?.has(mod.id)
+                      const count    = selected[g.id]?.[mod.id] ?? 0
+                      const sel      = count > 0
+                      const total    = Object.values(selected[g.id] ?? {}).reduce((s, n) => s + n, 0)
+                      const maxSel   = g.max_selections ?? 99
+                      const canAdd   = !g.multi_select || total < maxSel
+
+                      if (g.multi_select) {
+                        // UI de contador +/- para grupos multi_select (paquetes)
+                        return (
+                          <div key={mod.id}
+                            className={`flex items-center justify-between px-4 py-2.5 rounded-xl border-2 text-sm transition-all ${
+                              sel ? 'border-gray-900 bg-gray-50' : 'border-gray-200'
+                            }`}>
+                            <span className="font-medium text-gray-800">{mod.name}</span>
+                            <div className="flex items-center gap-2">
+                              {Number(mod.price_extra) > 0
+                                ? <span className="text-green-700 font-medium text-xs">+{mxn(mod.price_extra)}</span>
+                                : <span className="text-gray-400 text-xs">Gratis</span>}
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => decrement(g, mod)}
+                                  disabled={count === 0}
+                                  className={`w-7 h-7 rounded-full border-2 flex items-center justify-center font-bold text-base transition-all ${
+                                    count > 0 ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 text-gray-300'
+                                  }`}>
+                                  −
+                                </button>
+                                {count > 0 && (
+                                  <span className="w-5 text-center font-bold text-gray-900 text-sm">{count}</span>
+                                )}
+                                <button
+                                  onClick={() => toggle(g, mod)}
+                                  disabled={!canAdd}
+                                  className={`w-7 h-7 rounded-full border-2 flex items-center justify-center font-bold text-base transition-all ${
+                                    canAdd ? 'border-gray-900 bg-gray-900 text-white hover:bg-gray-700' : 'border-gray-200 text-gray-300'
+                                  }`}>
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      }
+
+                      // UI normal toggle para single-select
                       return (
                         <button key={mod.id} onClick={() => toggle(g, mod)}
                           className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border-2 text-sm transition-all ${
@@ -865,6 +956,11 @@ function ModifierModal({ product, onClose, onConfirm }) {
                       )
                     })}
                   </div>
+                  {g.multi_select && g.max_selections && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      {Object.values(selected[g.id] ?? {}).reduce((s, n) => s + n, 0)} / {g.max_selections} seleccionados
+                    </p>
+                  )}
                 </div>
               ))}
             </>
@@ -1147,7 +1243,17 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
         ) : (
           <div className="p-5 space-y-4">
             <div className="bg-gray-50 rounded-xl p-4 space-y-2">
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-2">Resumen del turno</p>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-1">Resumen del turno</p>
+              {cashRegister.opening_at && (() => {
+                const d = new Date(cashRegister.opening_at)
+                const openFmt = d.toLocaleString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })
+                const isStale = d.toDateString() !== new Date().toDateString()
+                return (
+                  <p className={`text-xs mb-2 font-medium ${isStale ? 'text-red-600' : 'text-gray-400'}`}>
+                    {isStale ? '⚠️ ' : ''}Turno abierto desde: {openFmt}
+                  </p>
+                )
+              })()}
               <Row label="Apertura de caja"    value={mxn(cashRegister.opening_amount)} />
               <Row label="Efectivo"        value={mxn(summary.efectivo)}      cls="text-green-700" />
               <Row label="Tarjeta"         value={mxn(summary.tarjeta)}       cls="text-blue-700" />
