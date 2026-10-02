@@ -739,10 +739,13 @@ function ModifierModal({ product, onClose, onConfirm }) {
     async function load() {
       const { data: assignments } = await supabase
         .from('product_modifier_group_assignments')
-        .select('sort_order, modifier_groups(*, modifiers(*))')
+        .select('sort_order, max_selections, modifier_groups(*, modifiers(*))')
         .eq('product_id', product.id)
         .order('sort_order')
-      setGroups((assignments ?? []).map(a => a.modifier_groups).filter(Boolean))
+      setGroups((assignments ?? []).map(a => ({
+        ...a.modifier_groups,
+        max_selections: a.max_selections ?? a.modifier_groups?.max_selections,
+      })).filter(Boolean))
 
       // Cargar componentes del combo directamente (sin join para evitar ambigüedad de FK)
       const { data: cData } = await supabase
