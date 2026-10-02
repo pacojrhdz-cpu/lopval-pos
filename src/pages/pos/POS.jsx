@@ -6,9 +6,11 @@ import { mxn } from '../../utils/format'
 import {
   ShoppingCart, Search, Plus, Minus, Trash2, Tag,
   CreditCard, Banknote, Smartphone, X, CheckCircle, Clock,
-  Printer, BookOpen, Scissors, ChefHat, FileText, MessageSquare
+  Printer, BookOpen, Scissors, ChefHat, FileText, MessageSquare,
+  AlertTriangle
 } from 'lucide-react'
 import InvoiceModal from '../../components/pos/InvoiceModal'
+import GastosTips from './GastosTips'
 import { printTicket, printComanda } from '../../utils/thermalPrinter'
 
 const CAT_COLORS = {
@@ -30,6 +32,8 @@ export default function POS() {
   const [cart,             setCart]             = useState([])
   const [takeout,          setTakeout]          = useState(false)
   const [packagingIds,     setPackagingIds]     = useState({})
+  const [lowStockItems,    setLowStockItems]    = useState([])
+  const [showLowStock,     setShowLowStock]     = useState(true)
   const [discount,         setDiscount]         = useState('')
   const [discReason,       setDiscReason]       = useState('')
   const [showPayment,      setShowPayment]      = useState(false)
@@ -44,6 +48,7 @@ export default function POS() {
   const [pendingProduct,   setPendingProduct]   = useState(null)  // producto esperando selección de modificadores
   const [noteItem,         setNoteItem]         = useState(null)  // item del carrito en edición de notas
   const [showRecientes,    setShowRecientes]    = useState(false)
+  const [showGastos,       setShowGastos]       = useState(false)
 
   useEffect(() => {
     fetchCategories()
@@ -101,9 +106,25 @@ export default function POS() {
     })))
   }
   async function fetchRecentSales() {
-    const { data } = await supabase.from('sales').select('id,created_at,total,payment_method').order('created_at', { ascending: false }).limit(5)
+    let q = supabase.from('sales').select('id,created_at,total,payment_method').eq('status', 'completed').order('created_at', { ascending: false }).limit(5)
+    if (activeBranch?.id) q = q.eq('branch_id', activeBranch.id)
+    const { data } = await q
     setRecentSales(data ?? [])
   }
+
+  // Carga insumos bajo stock mínimo para la sucursal actual
+  useEffect(() => {
+    if (!activeBranch?.id) return
+    supabase.from('inventory')
+      .select('ingredient_id, quantity, min_stock, ingredients(name)')
+      .eq('branch_id', activeBranch.id)
+      .gt('min_stock', 0)
+      .then(({ data }) => {
+        const low = (data ?? []).filter(r => r.quantity < r.min_stock)
+        setLowStockItems(low.map(r => r.ingredients?.name ?? 'Insumo').filter(Boolean))
+        setShowLowStock(low.length > 0)
+      })
+  }, [activeBranch])
 
   // Carga IDs de ingredientes de empaque pizza (plato / caja)
   useEffect(() => {
@@ -379,12 +400,29 @@ export default function POS() {
             <BookOpen className="w-4 h-4" /> Cuentas
           </button>
           <button
+            onClick={() => setShowGastos(true)}
+            className="flex items-center gap-2 px-3 py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-xl text-sm font-medium transition-colors"
+          >
+            💸 Gastos
+          </button>
+          <button
             onClick={() => setShowCorte(true)}
             className="flex items-center gap-2 px-3 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl text-sm font-medium transition-colors"
           >
             <Scissors className="w-4 h-4" /> Corte
           </button>
         </div>
+
+        {/* Alerta de insumos bajos */}
+        {showLowStock && lowStockItems.length > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-700 text-xs">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="flex-1">
+              <b>Insumos bajo mínimo:</b> {lowStockItems.slice(0, 5).join(', ')}{lowStockItems.length > 5 ? ` +${lowStockItems.length - 5} más` : ''}
+            </span>
+            <button onClick={() => setShowLowStock(false)} className="text-amber-500 hover:text-amber-700 ml-1">✕</button>
+          </div>
+        )}
 
         <div className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide bg-white border-b">
           {['Todos', ...categories.map(c => c.name)].map(cat => (
@@ -626,6 +664,13 @@ export default function POS() {
           onClose={() => setLastSale(null)}
         />
       )}
+      {showGastos && (
+        <GastosTips
+          cashRegisterId={cashRegister?.id ?? null}
+          onClose={() => setShowGastos(false)}
+        />
+      )}
+
       {/* FACTURACIÓN DESACTIVADA TEMPORALMENTE
       {showInvoice && lastSale && (
         <InvoiceModal
@@ -1026,28 +1071,13 @@ function CorteModal({ cashRegister, onClose, onClosed }) {
   async function fetchSummary() {
     setLoading(true)
 
-    // Usar activeBranch del contexto como fuente principal de branch_id.
-    // cashRegister.branch_id puede ser null en registros viejos, por eso
-    // activeBranch es el fallback seguro — ambos admins siempre ven lo mismo.
-    const branchId = activeBranch?.id ?? cashRegister.branch_id
-    let sinceDate = cashRegister.opening_at  // fallback: apertura de este registro
-
-    if (branchId) {
-      const { data: lastClosed } = await supabase
-        .from('cash_registers')
-        .select('closing_at')
-        .eq('branch_id', branchId)
-        .eq('status', 'closed')
-        .order('closing_at', { ascending: false })
-        .limit(1)
-      if (lastClosed?.[0]?.closing_at) sinceDate = lastClosed[0].closing_at
-    }
-
+    // Filtrar EXACTAMENTE por el cash_register_id de este turno.
+    // Antes filtraba por fecha+sucursal, lo que acumulaba ventas de otros
+    // cajeros/turnos abiertos en paralelo y descuadraba el corte.
     const { data } = await supabase
       .from('sales')
       .select('total, payment_method, payments')
-      .eq('branch_id', branchId)
-      .gte('created_at', sinceDate)
+      .eq('cash_register_id', cashRegister.id)
       .eq('status', 'completed')
 
     const s = (data ?? []).reduce((acc, sale) => {
