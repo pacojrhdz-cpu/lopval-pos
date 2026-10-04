@@ -3,7 +3,8 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   FileText, ChevronLeft, ChevronRight, Printer,
-  TrendingUp, Users, Wallet, DollarSign
+  TrendingUp, Users, Wallet, DollarSign,
+  Share2, BarChart2, Calendar, ShoppingBag
 } from 'lucide-react'
 
 const mxn = n => `$${Number(n ?? 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
@@ -60,7 +61,6 @@ async function generatePDF({ branch, mon, sun, sales, cashRegs, employees, atten
     ? `<img src="${logoB64}" style="height:52px;filter:invert(1) brightness(2)">`
     : `<div style="width:48px;height:48px;background:#333;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:#fff">${(branch?.name ?? 'L').charAt(0)}</div>`
 
-  // ── Ventas ───────────────────────────────────────────────────────────────
   const totalVentas   = sales.reduce((s, r) => s + Number(r.total ?? 0), 0)
   const numVentas     = sales.length
   const avgTicket     = numVentas > 0 ? totalVentas / numVentas : 0
@@ -71,7 +71,7 @@ async function generatePDF({ branch, mon, sun, sales, cashRegs, employees, atten
     return acc
   }, {})
 
-  const methodLabels = { cash: 'Efectivo', card: 'Tarjeta', transfer: 'Transferencia' }
+  const methodLabels = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia' }
   const metodosRows = Object.entries(byMethod).map(([m, v]) => `
     <tr>
       <td style="padding:7px 12px;font-size:12px">${methodLabels[m] ?? m}</td>
@@ -79,15 +79,13 @@ async function generatePDF({ branch, mon, sun, sales, cashRegs, employees, atten
       <td style="padding:7px 12px;text-align:right;color:#9ca3af;font-size:11px">${totalVentas > 0 ? ((v / totalVentas)*100).toFixed(1) : 0}%</td>
     </tr>`).join('')
 
-  // ── Caja / Efectivo ───────────────────────────────────────────────────────
-  const cashSales   = byMethod['cash'] ?? 0
+  const cashSales   = byMethod['efectivo'] ?? 0
   const openTotal   = cashRegs.reduce((s, r) => s + Number(r.opening_amount ?? 0), 0)
   const closeTotal  = cashRegs.reduce((s, r) => s + Number(r.closing_amount ?? 0), 0)
   const diffCaja    = closeTotal - openTotal - cashSales
 
-  // ── Nómina ────────────────────────────────────────────────────────────────
-  const WORK_DAYS = 6   // días laborales por semana
-  const WEEK_DAYS = 7   // divisor para salario diario (incluye día de descanso pagado)
+  const WORK_DAYS = 6
+  const WEEK_DAYS = 7
   const nomRows = employees.map(emp => {
     const sueldo    = Number(emp.weekly_salary ?? 0)
     const dias      = attendance.filter(a => a.employee_id === emp.id && a.check_in).length
@@ -109,11 +107,9 @@ async function generatePDF({ branch, mon, sun, sales, cashRegs, employees, atten
       <td style="padding:8px 12px;text-align:right;font-weight:700;font-size:12px;color:${row.pago > 0 ? '#111' : '#d1d5db'}">${mxn(row.pago)}</td>
     </tr>`).join('')
 
-  // ── Utilidad estimada ─────────────────────────────────────────────────────
   const utilidad = totalVentas - totalNomina
 
   const body = `
-    <!-- Header -->
     <div style="background:#111;color:#fff;padding:22px 32px;display:flex;align-items:center;justify-content:space-between">
       <div>
         <div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#9ca3af;margin-bottom:4px">Grupo Lopval</div>
@@ -122,16 +118,10 @@ async function generatePDF({ branch, mon, sun, sales, cashRegs, employees, atten
       </div>
       ${logoHtml}
     </div>
-
-    <!-- Meta -->
     <div style="background:#f3f4f6;padding:10px 32px;font-size:10px;color:#9ca3af;display:flex;gap:32px;border-bottom:1px solid #e5e7eb">
       <span>Generado: ${new Date().toLocaleString('es-MX', { dateStyle:'long', timeStyle:'short' })}</span>
-      <span>Período: Semana ${mon.toLocaleDateString('es-MX', { year:'numeric', month:'short', day:'numeric' })} – ${sun.toLocaleDateString('es-MX', { year:'numeric', month:'short', day:'numeric' })}</span>
     </div>
-
-    <div style="padding:24px 32px;space-y:24px">
-
-      <!-- KPIs -->
+    <div style="padding:24px 32px">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#6b7280;margin-bottom:12px">Resumen ejecutivo</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
         ${statCard('', 'Ventas totales',  mxn(totalVentas),  `${numVentas} transacciones`)}
@@ -139,30 +129,22 @@ async function generatePDF({ branch, mon, sun, sales, cashRegs, employees, atten
         ${statCard('', 'Nómina a pagar',  mxn(totalNomina),  `vs ${mxn(totalSueldo)} base`, '#b45309')}
         ${statCard('', 'Utilidad est.',   mxn(utilidad),     'ventas − nómina', utilidad >= 0 ? '#15803d' : '#dc2626')}
       </div>
-
-      <!-- Ventas por método -->
       <div style="margin-bottom:24px">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#6b7280;margin-bottom:10px">Ventas por método de pago</div>
         <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb">
-          <thead>
-            <tr style="background:#111;color:#fff">
-              <th style="text-align:left;padding:9px 12px;font-size:11px">Método</th>
-              <th style="text-align:right;padding:9px 12px;font-size:11px">Total</th>
-              <th style="text-align:right;padding:9px 12px;font-size:11px">%</th>
-            </tr>
-          </thead>
+          <thead><tr style="background:#111;color:#fff">
+            <th style="text-align:left;padding:9px 12px;font-size:11px">Método</th>
+            <th style="text-align:right;padding:9px 12px;font-size:11px">Total</th>
+            <th style="text-align:right;padding:9px 12px;font-size:11px">%</th>
+          </tr></thead>
           <tbody>${metodosRows}</tbody>
-          <tfoot>
-            <tr style="background:#f9fafb;border-top:2px solid #e5e7eb">
-              <td style="padding:9px 12px;font-size:12px;font-weight:700">Total</td>
-              <td style="padding:9px 12px;text-align:right;font-weight:900;font-size:13px">${mxn(totalVentas)}</td>
-              <td style="padding:9px 12px;text-align:right;color:#9ca3af;font-size:11px">100%</td>
-            </tr>
-          </tfoot>
+          <tfoot><tr style="background:#f9fafb;border-top:2px solid #e5e7eb">
+            <td style="padding:9px 12px;font-size:12px;font-weight:700">Total</td>
+            <td style="padding:9px 12px;text-align:right;font-weight:900;font-size:13px">${mxn(totalVentas)}</td>
+            <td style="padding:9px 12px;text-align:right;color:#9ca3af;font-size:11px">100%</td>
+          </tr></tfoot>
         </table>
       </div>
-
-      <!-- Caja / Efectivo -->
       <div style="margin-bottom:24px">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#6b7280;margin-bottom:10px">Corte de caja — efectivo</div>
         <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
@@ -178,35 +160,27 @@ async function generatePDF({ branch, mon, sun, sales, cashRegs, employees, atten
             </div>`).join('')}
         </div>
       </div>
-
-      <!-- Nómina -->
       <div style="margin-bottom:24px">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#6b7280;margin-bottom:10px">Nómina semanal por asistencia</div>
         ${employees.length === 0
           ? '<p style="font-size:12px;color:#9ca3af;text-align:center;padding:16px">Sin empleados en este período</p>'
           : `<table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb">
-            <thead>
-              <tr style="background:#111;color:#fff">
-                <th style="text-align:left;padding:9px 12px;font-size:11px">Empleado</th>
-                <th style="text-align:left;padding:9px 12px;font-size:11px">Puesto</th>
-                <th style="text-align:center;padding:9px 12px;font-size:11px">Asistencias</th>
-                <th style="text-align:center;padding:9px 12px;font-size:11px">Faltas</th>
-                <th style="text-align:right;padding:9px 12px;font-size:11px">Sueldo base</th>
-                <th style="text-align:right;padding:9px 12px;font-size:11px">A pagar</th>
-              </tr>
-            </thead>
+            <thead><tr style="background:#111;color:#fff">
+              <th style="text-align:left;padding:9px 12px;font-size:11px">Empleado</th>
+              <th style="text-align:left;padding:9px 12px;font-size:11px">Puesto</th>
+              <th style="text-align:center;padding:9px 12px;font-size:11px">Asistencias</th>
+              <th style="text-align:center;padding:9px 12px;font-size:11px">Faltas</th>
+              <th style="text-align:right;padding:9px 12px;font-size:11px">Sueldo base</th>
+              <th style="text-align:right;padding:9px 12px;font-size:11px">A pagar</th>
+            </tr></thead>
             <tbody>${nomTabla}</tbody>
-            <tfoot>
-              <tr style="background:#f9fafb;border-top:2px solid #e5e7eb">
-                <td colspan="4" style="padding:9px 12px;font-size:12px;font-weight:700">Total nómina</td>
-                <td style="padding:9px 12px;text-align:right;font-size:12px;color:#6b7280">${mxn(totalSueldo)}</td>
-                <td style="padding:9px 12px;text-align:right;font-weight:900;font-size:13px">${mxn(totalNomina)}</td>
-              </tr>
-            </tfoot>
+            <tfoot><tr style="background:#f9fafb;border-top:2px solid #e5e7eb">
+              <td colspan="4" style="padding:9px 12px;font-size:12px;font-weight:700">Total nómina</td>
+              <td style="padding:9px 12px;text-align:right;font-size:12px;color:#6b7280">${mxn(totalSueldo)}</td>
+              <td style="padding:9px 12px;text-align:right;font-weight:900;font-size:13px">${mxn(totalNomina)}</td>
+            </tr></tfoot>
           </table>`}
       </div>
-
-      <!-- Firma -->
       <div style="margin-top:40px;display:flex;gap:48px">
         <div style="flex:1"><div style="border-top:1.5px solid #111;padding-top:8px">
           <div style="font-size:11px;font-weight:700">______________________________</div>
@@ -217,7 +191,6 @@ async function generatePDF({ branch, mon, sun, sales, cashRegs, employees, atten
           <div style="font-size:9px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px">Director / Administrador</div>
         </div></div>
       </div>
-
       <div style="margin-top:24px;text-align:center;font-size:9px;color:#d1d5db;letter-spacing:1px;border-top:1px solid #e5e7eb;padding-top:12px">
         GRUPO LOPVAL · DOCUMENTO CONFIDENCIAL · USO INTERNO
       </div>
@@ -242,11 +215,13 @@ async function generatePDF({ branch, mon, sun, sales, cashRegs, employees, atten
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Reports() {
   const { activeBranch, isAdmin } = useAuth()
-  const [weekAnchor, setWeekAnchor] = useState(new Date())
-  const [data,       setData]       = useState(null)
-  const [loading,    setLoading]    = useState(false)
-  const [branches,   setBranches]   = useState([])
-  const [selBranch,  setSelBranch]  = useState(null)
+  const [mode,        setMode]       = useState('week') // 'week' | 'day'
+  const [weekAnchor,  setWeekAnchor] = useState(new Date())
+  const [data,        setData]       = useState(null)
+  const [dayData,     setDayData]    = useState(null)
+  const [loading,     setLoading]    = useState(false)
+  const [branches,    setBranches]   = useState([])
+  const [selBranch,   setSelBranch]  = useState(null)
 
   const { mon, sun } = weekRange(weekAnchor)
   const isCurrentWeek = isoDate(mon) === isoDate(weekRange(new Date()).mon)
@@ -264,13 +239,15 @@ export default function Reports() {
   }, [isAdmin, activeBranch])
 
   useEffect(() => {
-    if (selBranch) fetchReport()
-  }, [selBranch, mon])
+    if (!selBranch) return
+    if (mode === 'week') fetchReport()
+    else fetchDayReport()
+  }, [selBranch, mon, mode])
 
+  // ── Reporte semanal ──────────────────────────────────────────────────────
   async function fetchReport() {
     if (!selBranch) return
     setLoading(true)
-
     const [
       { data: sales },
       { data: cashRegs },
@@ -299,27 +276,66 @@ export default function Reports() {
         .gte('work_date', isoDate(mon))
         .lte('work_date', isoDate(sun)),
     ])
+    setData({ sales: sales ?? [], cashRegs: cashRegs ?? [], employees: employees ?? [], attendance: attendance ?? [] })
+    setLoading(false)
+  }
 
-    setData({
-      sales:      sales ?? [],
-      cashRegs:   cashRegs ?? [],
-      employees:  employees ?? [],
-      attendance: attendance ?? [],
+  // ── Reporte del día ──────────────────────────────────────────────────────
+  async function fetchDayReport() {
+    if (!selBranch) return
+    setLoading(true)
+
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0)
+    const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999)
+
+    const { data: salesWithItems } = await supabase
+      .from('sales')
+      .select('id, total, payment_method, created_at, sale_items(product_name, quantity, price)')
+      .eq('branch_id', selBranch.id)
+      .eq('status', 'completed')
+      .gte('created_at', todayStart.toISOString())
+      .lte('created_at', todayEnd.toISOString())
+
+    const sales = salesWithItems ?? []
+    const totalVentas = sales.reduce((s, r) => s + Number(r.total ?? 0), 0)
+    const numVentas   = sales.length
+    const avgTicket   = numVentas > 0 ? totalVentas / numVentas : 0
+
+    const byMethod = sales.reduce((acc, r) => {
+      const m = r.payment_method ?? 'otro'
+      acc[m] = (acc[m] ?? 0) + Number(r.total ?? 0)
+      return acc
+    }, {})
+
+    // Agrupar productos
+    const productMap = {}
+    sales.forEach(sale => {
+      (sale.sale_items ?? []).forEach(item => {
+        const key = item.product_name ?? 'Sin nombre'
+        if (!productMap[key]) productMap[key] = { name: key, qty: 0, total: 0 }
+        productMap[key].qty   += Number(item.quantity ?? 1)
+        productMap[key].total += Number(item.price ?? 0) * Number(item.quantity ?? 1)
+      })
     })
+    const topProducts = Object.values(productMap)
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 10)
+
+    setDayData({ totalVentas, numVentas, avgTicket, byMethod, topProducts, date: new Date() })
     setLoading(false)
   }
 
   function prevWeek() { const d = new Date(weekAnchor); d.setDate(d.getDate()-7); setWeekAnchor(d) }
   function nextWeek() { const d = new Date(weekAnchor); d.setDate(d.getDate()+7); setWeekAnchor(d) }
 
-  // Calcular KPIs para vista previa
+  // ── KPIs semana ──────────────────────────────────────────────────────────
   const kpis = (() => {
     if (!data) return null
     const { sales, cashRegs, employees, attendance } = data
     const totalVentas  = sales.reduce((s, r) => s + Number(r.total ?? 0), 0)
     const numVentas    = sales.length
     const avgTicket    = numVentas > 0 ? totalVentas / numVentas : 0
-    const cashSales    = sales.filter(r => r.payment_method === 'cash').reduce((s, r) => s + Number(r.total ?? 0), 0)
+    const cashSales    = sales.filter(r => r.payment_method === 'efectivo').reduce((s, r) => s + Number(r.total ?? 0), 0)
     const openTotal    = cashRegs.reduce((s, r) => s + Number(r.opening_amount ?? 0), 0)
     const closeTotal   = cashRegs.reduce((s, r) => s + Number(r.closing_amount ?? 0), 0)
     const diffCaja     = closeTotal - openTotal - cashSales
@@ -339,6 +355,43 @@ export default function Reports() {
     await generatePDF({ branch: selBranch, mon, sun, ...data })
   }
 
+  // ── Compartir reporte del día por WhatsApp ───────────────────────────────
+  function shareWhatsApp() {
+    if (!dayData) return
+    const d    = dayData
+    const fecha = d.date.toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long' })
+    const metodos = Object.entries(d.byMethod)
+      .map(([m, v]) => {
+        const labels = { efectivo:'💵 Efectivo', tarjeta:'💳 Tarjeta', transferencia:'🏦 Transferencia' }
+        return `${labels[m] ?? m}: ${mxn(v)}`
+      }).join('\n')
+    const tops = d.topProducts.slice(0, 5)
+      .map((p, i) => `  ${i+1}. ${p.name} × ${p.qty}`)
+      .join('\n')
+
+    const msg = [
+      `📊 *Reporte del Día — ${selBranch?.name ?? ''}*`,
+      `📅 ${fecha}`,
+      ``,
+      `💰 *Total ventas:* ${mxn(d.totalVentas)}`,
+      `🧾 *Ticket promedio:* ${mxn(d.avgTicket)}`,
+      `🛒 *Transacciones:* ${d.numVentas}`,
+      ``,
+      `*Métodos de pago:*`,
+      metodos,
+      ``,
+      `🏆 *Top productos:*`,
+      tops,
+      ``,
+      `_Generado desde Grupo Lopval POS_`,
+    ].join('\n')
+
+    const url = `https://wa.me/?text=${encodeURIComponent(msg)}`
+    window.open(url, '_blank')
+  }
+
+  const methodLabels = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia' }
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-5">
 
@@ -348,32 +401,63 @@ export default function Reports() {
           <FileText className="w-6 h-6 text-gray-800" />
           <h1 className="text-2xl font-bold text-gray-900">Reportes</h1>
         </div>
-        {data && (
-          <button onClick={handlePrint}
-            className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors">
-            <Printer className="w-4 h-4" /> Imprimir / Descargar PDF
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {mode === 'day' && dayData && (
+            <button onClick={shareWhatsApp}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors">
+              <Share2 className="w-4 h-4" /> Compartir WhatsApp
+            </button>
+          )}
+          {mode === 'week' && data && (
+            <button onClick={handlePrint}
+              className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors">
+              <Printer className="w-4 h-4" /> Imprimir / PDF
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs: Hoy / Semana */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setMode('day')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            mode === 'day' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}>
+          <BarChart2 className="w-3.5 h-3.5" /> Reporte del Día
+        </button>
+        <button
+          onClick={() => setMode('week')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            mode === 'week' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}>
+          <Calendar className="w-3.5 h-3.5" /> Reporte Semanal
+        </button>
       </div>
 
       {/* Controles */}
       <div className="flex flex-wrap gap-3 items-center">
-        {/* Selector de semana */}
-        <div className="flex items-center gap-2">
-          <button onClick={prevWeek}
-            className="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 transition-colors">
-            <ChevronLeft className="w-4 h-4 text-gray-600" />
-          </button>
-          <div className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 min-w-[200px] text-center">
-            {fmtDate(mon, { day:'numeric', month:'short' })} — {fmtDate(sun, { day:'numeric', month:'short', year:'numeric' })}
+        {mode === 'week' && (
+          <div className="flex items-center gap-2">
+            <button onClick={prevWeek}
+              className="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 transition-colors">
+              <ChevronLeft className="w-4 h-4 text-gray-600" />
+            </button>
+            <div className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 min-w-[200px] text-center">
+              {fmtDate(mon, { day:'numeric', month:'short' })} — {fmtDate(sun, { day:'numeric', month:'short', year:'numeric' })}
+            </div>
+            <button onClick={nextWeek} disabled={isCurrentWeek}
+              className="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-40">
+              <ChevronRight className="w-4 h-4 text-gray-600" />
+            </button>
           </div>
-          <button onClick={nextWeek} disabled={isCurrentWeek}
-            className="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-40">
-            <ChevronRight className="w-4 h-4 text-gray-600" />
-          </button>
-        </div>
+        )}
+        {mode === 'day' && (
+          <div className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700">
+            {new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}
+          </div>
+        )}
 
-        {/* Selector de sucursal (solo admin) */}
         {isAdmin && branches.length > 1 && (
           <select value={selBranch?.id ?? ''}
             onChange={e => setSelBranch(branches.find(b => b.id === e.target.value) ?? null)}
@@ -381,92 +465,193 @@ export default function Reports() {
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         )}
+
+        {mode === 'day' && (
+          <button onClick={fetchDayReport}
+            className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            ↻ Actualizar
+          </button>
+        )}
       </div>
 
-      {/* KPI cards */}
-      {loading ? (
-        <div className="text-center py-16 text-gray-400">Cargando datos...</div>
-      ) : kpis ? (
-        <div className="space-y-4">
-          {/* Ventas */}
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5" /> Ventas
-            </p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {[
-                { label: 'Total ventas',    value: mxn(kpis.totalVentas), sub: `${kpis.numVentas} transacciones` },
-                { label: 'Ticket promedio', value: mxn(kpis.avgTicket),   sub: '' },
-                { label: 'Ventas efectivo', value: mxn(kpis.cashSales),   sub: '' },
-              ].map(c => (
-                <div key={c.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                  <p className="text-xs text-gray-400 mb-1">{c.label}</p>
-                  <p className="text-xl font-black text-gray-900">{c.value}</p>
-                  {c.sub && <p className="text-xs text-gray-400 mt-0.5">{c.sub}</p>}
+      {/* ── REPORTE DEL DÍA ─────────────────────────────────────────────────── */}
+      {mode === 'day' && (
+        loading ? (
+          <div className="text-center py-16 text-gray-400">Cargando datos de hoy...</div>
+        ) : dayData ? (
+          <div className="space-y-4">
+
+            {/* KPIs del día */}
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5" /> Resumen del día
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: 'Total ventas',    value: mxn(dayData.totalVentas), sub: `${dayData.numVentas} transacciones` },
+                  { label: 'Ticket promedio', value: mxn(dayData.avgTicket),   sub: '' },
+                  { label: 'Transacciones',   value: dayData.numVentas,         sub: '' },
+                ].map(c => (
+                  <div key={c.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                    <p className="text-xs text-gray-400 mb-1">{c.label}</p>
+                    <p className="text-xl font-black text-gray-900">{c.value}</p>
+                    {c.sub && <p className="text-xs text-gray-400 mt-0.5">{c.sub}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Métodos de pago del día */}
+            {Object.keys(dayData.byMethod).length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Wallet className="w-3.5 h-3.5" /> Por método de pago
+                </p>
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-50">
+                  {Object.entries(dayData.byMethod).map(([m, v]) => (
+                    <div key={m} className="flex justify-between px-4 py-3 text-sm">
+                      <span className="text-gray-600">{methodLabels[m] ?? m}</span>
+                      <div className="text-right">
+                        <span className="font-semibold text-gray-800">{mxn(v)}</span>
+                        <span className="text-xs text-gray-400 ml-2">
+                          {dayData.totalVentas > 0 ? ((v / dayData.totalVentas) * 100).toFixed(0) : 0}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+            )}
+
+            {/* Productos más vendidos */}
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <ShoppingBag className="w-3.5 h-3.5" /> Productos más vendidos hoy
+              </p>
+              {dayData.topProducts.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-6 text-center text-sm text-gray-400">
+                  Sin ventas registradas hoy
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  {dayData.topProducts.map((p, i) => {
+                    const maxQty = dayData.topProducts[0]?.qty || 1
+                    const pct    = Math.round((p.qty / maxQty) * 100)
+                    return (
+                      <div key={p.name} className={`px-4 py-3 ${i < dayData.topProducts.length - 1 ? 'border-b border-gray-50' : ''}`}>
+                        <div className="flex justify-between items-center mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-gray-300 w-5 text-right">{i+1}</span>
+                            <span className="text-sm font-semibold text-gray-800">{p.name}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm font-bold text-gray-800">{p.qty} pzas</span>
+                            <span className="text-xs text-gray-400 ml-2">{mxn(p.total)}</span>
+                          </div>
+                        </div>
+                        <div className="ml-7 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gray-800 rounded-full transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
+        ) : (
+          <div className="text-center py-16 text-gray-300">
+            <BarChart2 className="w-12 h-12 mx-auto mb-2 opacity-30" />
+            <p className="text-gray-400">Selecciona una sucursal para ver el reporte</p>
+          </div>
+        )
+      )}
 
-          {/* Caja */}
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Wallet className="w-3.5 h-3.5" /> Caja — efectivo
-            </p>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-50">
-              {[
-                { l: 'Fondo apertura',       v: mxn(kpis.openTotal)  },
-                { l: 'Ventas en efectivo',   v: mxn(kpis.cashSales)  },
-                { l: 'Cierre registrado',    v: mxn(kpis.closeTotal) },
-              ].map(r => (
-                <div key={r.l} className="flex justify-between px-4 py-3 text-sm">
-                  <span className="text-gray-600">{r.l}</span>
-                  <span className="font-semibold text-gray-800">{r.v}</span>
+      {/* ── REPORTE SEMANAL ──────────────────────────────────────────────────── */}
+      {mode === 'week' && (
+        loading ? (
+          <div className="text-center py-16 text-gray-400">Cargando datos...</div>
+        ) : kpis ? (
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5" /> Ventas
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {[
+                  { label: 'Total ventas',    value: mxn(kpis.totalVentas), sub: `${kpis.numVentas} transacciones` },
+                  { label: 'Ticket promedio', value: mxn(kpis.avgTicket),   sub: '' },
+                  { label: 'Ventas efectivo', value: mxn(kpis.cashSales),   sub: '' },
+                ].map(c => (
+                  <div key={c.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                    <p className="text-xs text-gray-400 mb-1">{c.label}</p>
+                    <p className="text-xl font-black text-gray-900">{c.value}</p>
+                    {c.sub && <p className="text-xs text-gray-400 mt-0.5">{c.sub}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Wallet className="w-3.5 h-3.5" /> Caja — efectivo
+              </p>
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-50">
+                {[
+                  { l: 'Fondo apertura',       v: mxn(kpis.openTotal)  },
+                  { l: 'Ventas en efectivo',   v: mxn(kpis.cashSales)  },
+                  { l: 'Cierre registrado',    v: mxn(kpis.closeTotal) },
+                ].map(r => (
+                  <div key={r.l} className="flex justify-between px-4 py-3 text-sm">
+                    <span className="text-gray-600">{r.l}</span>
+                    <span className="font-semibold text-gray-800">{r.v}</span>
+                  </div>
+                ))}
+                <div className={`flex justify-between px-4 py-3 text-sm rounded-b-2xl font-bold ${
+                  Math.abs(kpis.diffCaja) < 1 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                }`}>
+                  <span>Diferencia de caja</span>
+                  <span>{mxn(kpis.diffCaja)} {Math.abs(kpis.diffCaja) < 1 ? '✓' : '⚠️'}</span>
                 </div>
-              ))}
-              <div className={`flex justify-between px-4 py-3 text-sm rounded-b-2xl font-bold ${
-                Math.abs(kpis.diffCaja) < 1 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5" /> Nómina
+              </p>
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex justify-between items-center">
+                <span className="text-sm text-gray-600">Total a pagar esta semana</span>
+                <span className="text-lg font-black text-gray-900">{mxn(kpis.totalNomina)}</span>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <DollarSign className="w-3.5 h-3.5" /> Utilidad estimada
+              </p>
+              <div className={`rounded-2xl border shadow-sm px-4 py-4 ${
+                kpis.utilidad >= 0 ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
               }`}>
-                <span>Diferencia de caja</span>
-                <span>{mxn(kpis.diffCaja)} {Math.abs(kpis.diffCaja) < 1 ? '✓' : '⚠️'}</span>
+                <p className="text-xs text-gray-500 mb-1">Ventas − Nómina</p>
+                <p className={`text-3xl font-black ${kpis.utilidad >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                  {mxn(kpis.utilidad)}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {mxn(kpis.totalVentas)} ventas − {mxn(kpis.totalNomina)} nómina
+                </p>
               </div>
             </div>
           </div>
-
-          {/* Nómina */}
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5" /> Nómina
-            </p>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex justify-between items-center">
-              <span className="text-sm text-gray-600">Total a pagar esta semana</span>
-              <span className="text-lg font-black text-gray-900">{mxn(kpis.totalNomina)}</span>
-            </div>
+        ) : (
+          <div className="text-center py-16 text-gray-300">
+            <FileText className="w-12 h-12 mx-auto mb-2 opacity-30" />
+            <p className="text-gray-400">Selecciona una sucursal y período</p>
           </div>
-
-          {/* Utilidad */}
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <DollarSign className="w-3.5 h-3.5" /> Utilidad estimada
-            </p>
-            <div className={`rounded-2xl border shadow-sm px-4 py-4 ${
-              kpis.utilidad >= 0 ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
-            }`}>
-              <p className="text-xs text-gray-500 mb-1">Ventas − Nómina</p>
-              <p className={`text-3xl font-black ${kpis.utilidad >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                {mxn(kpis.utilidad)}
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                {mxn(kpis.totalVentas)} ventas − {mxn(kpis.totalNomina)} nómina
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="text-center py-16 text-gray-300">
-          <FileText className="w-12 h-12 mx-auto mb-2 opacity-30" />
-          <p className="text-gray-400">Selecciona una sucursal y período</p>
-        </div>
+        )
       )}
     </div>
   )
