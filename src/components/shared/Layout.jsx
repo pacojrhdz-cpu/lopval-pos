@@ -5,7 +5,7 @@ import {
   ShoppingCart, LayoutDashboard, Package, BookOpen,
   Warehouse, BarChart2, ClipboardList, LogOut, Menu,
   ClipboardCheck, Scissors, MapPin, RefreshCw,
-  Users, CalendarDays, FileText
+  Users, CalendarDays, FileText, Trash2
 } from 'lucide-react'
 
 const adminLinks = [
@@ -22,6 +22,7 @@ const adminLinks = [
   { to: '/admin/empleados',    icon: Users,           label: 'Empleados'       },
   { to: '/admin/asistencia',   icon: CalendarDays,    label: 'Asistencia'      },
   { to: '/admin/reportes',     icon: FileText,        label: 'Reportes'        },
+  { to: '/admin/eliminados',   icon: Trash2,          label: 'Art. Eliminados' },
 ]
 
 const managerLinks = [
