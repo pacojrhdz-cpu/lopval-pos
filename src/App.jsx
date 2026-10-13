@@ -20,6 +20,7 @@ import AdminCuentas      from './pages/admin/AdminCuentas'
 import AdminEmployees    from './pages/admin/AdminEmployees'
 import AdminAttendance   from './pages/admin/AdminAttendance'
 import Reports           from './pages/admin/Reports'
+import DeletionLog       from './pages/admin/DeletionLog'
 import AttendanceClock   from './pages/AttendanceClock'
 import KitchenDisplay    from './pages/KitchenDisplay'
 import Autofactura       from './pages/Autofactura'
@@ -117,6 +118,7 @@ function AppRoutes() {
       <Route path="/admin/empleados"         element={<A><AdminEmployees /></A>} />
       <Route path="/admin/asistencia"        element={<A><AdminAttendance /></A>} />
       <Route path="/admin/reportes"          element={<M><Reports /></M>} />
+      <Route path="/admin/eliminados"        element={<M><DeletionLog /></M>} />
 
       <Route path="/"  element={<Navigate to="/pos" replace />} />
       <Route path="*"  element={<Navigate to="/pos" replace />} />
