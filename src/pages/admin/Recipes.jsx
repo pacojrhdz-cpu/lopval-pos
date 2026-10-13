@@ -7,7 +7,7 @@ export default function Recipes() {
   const { activeBranch } = useAuth()
   const [products,    setProducts]    = useState([])
   const [ingredients, setIngredients] = useState([])
-  const [recipes,     setRecipes]     = useState({}) // { product_id: [recipes] }
+  const [recipes,     setRecipes]     = useState({}) // { product_id: [recipe_items] }
   const [expanded,    setExpanded]    = useState(null)
   const [addingTo,    setAddingTo]    = useState(null)   // product_id being edited
   const [newItem,     setNewItem]     = useState({ ingredient_id: '', quantity: '', unit: '' })
@@ -23,7 +23,7 @@ export default function Recipes() {
     const [{ data: p }, { data: i }, { data: r }] = await Promise.all([
       branchId ? productsQuery.eq('branch_id', branchId) : productsQuery,
       supabase.from('ingredients').select('*').eq('active', true).order('name'),
-      supabase.from('recipes').select('*, ingredients(name,unit)'),
+      supabase.from('recipes').select('*'),
     ])
     setProducts(p ?? [])
     setIngredients(i ?? [])
@@ -119,7 +119,7 @@ export default function Recipes() {
                     {items.map(ri => (
                       <div key={ri.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-2.5">
                         <div>
-                          <p className="text-sm font-medium text-gray-800">{ri.ingredients?.name ?? ri.ingredient_id}</p>
+                          <p className="text-sm font-medium text-gray-800">{ingredients.find(i => i.id === ri.ingredient_id)?.name ?? ri.ingredient_id}</p>
                           <p className="text-xs text-gray-500">{ri.quantity} {ri.unit}</p>
                         </div>
                         <button onClick={() => deleteRecipeItem(ri.id)} className="text-gray-300 hover:text-red-500 transition-colors">
