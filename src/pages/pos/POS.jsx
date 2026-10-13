@@ -197,7 +197,9 @@ export default function POS() {
           price:        item.price,
           mods:         item.mods?.map(m => m.name).join(', ') || null,
           note:         item.note || null,
-        }).then(() => {})  // fire and forget
+        }).then(({ error }) => {
+          if (error) console.error('[DeletionLog]', error.message)
+        })
       }
     }
     setCart(prev => prev.filter(i => i.cartKey !== cartKey))
