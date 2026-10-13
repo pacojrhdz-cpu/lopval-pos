@@ -23,7 +23,7 @@ export default function Recipes() {
     const [{ data: p }, { data: i }, { data: r }] = await Promise.all([
       branchId ? productsQuery.eq('branch_id', branchId) : productsQuery,
       supabase.from('ingredients').select('*').eq('active', true).order('name'),
-      supabase.from('recipe_items').select('*, ingredients(name,unit)'),
+      supabase.from('recipes').select('*, ingredients(name,unit)'),
     ])
     setProducts(p ?? [])
     setIngredients(i ?? [])
@@ -41,7 +41,7 @@ export default function Recipes() {
     if (!newItem.ingredient_id || !newItem.quantity) return
     setSaving(true)
     const ing = ingredients.find(i => i.id === newItem.ingredient_id)
-    await supabase.from('recipe_items').insert({
+    await supabase.from('recipes').insert({
       product_id:    productId,
       ingredient_id: newItem.ingredient_id,
       quantity:      parseFloat(newItem.quantity),
@@ -54,7 +54,7 @@ export default function Recipes() {
   }
 
   async function deleteRecipeItem(id) {
-    await supabase.from('recipe_items').delete().eq('id', id)
+    await supabase.from('recipes').delete().eq('id', id)
     fetchAll()
   }
 
