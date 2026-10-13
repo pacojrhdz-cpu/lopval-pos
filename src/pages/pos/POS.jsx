@@ -45,6 +45,7 @@ export default function POS() {
   const [showInvoice,      setShowInvoice]      = useState(false)
   const [sendingCmd,       setSendingCmd]       = useState(false)
   const [cmdSent,          setCmdSent]          = useState(false)
+  const [comandaEnviada,   setComandaEnviada]   = useState(false)
   const [pendingProduct,   setPendingProduct]   = useState(null)  // producto esperando selección de modificadores
   const [noteItem,         setNoteItem]         = useState(null)  // item del carrito en edición de notas
   const [showRecientes,    setShowRecientes]    = useState(false)
@@ -182,9 +183,27 @@ export default function POS() {
   }, [])
 
   const updateQty  = (cartKey, delta) => setCart(prev => prev.map(i => i.cartKey === cartKey ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0))
-  const removeItem = (cartKey)        => setCart(prev => prev.filter(i => i.cartKey !== cartKey))
+  const removeItem = (cartKey) => {
+    if (comandaEnviada) {
+      // Registrar la eliminación post-comanda
+      const item = cart.find(i => i.cartKey === cartKey)
+      if (item) {
+        supabase.from('order_item_deletions').insert({
+          branch_id:    activeBranch?.id ?? null,
+          cashier_id:   user?.id         ?? null,
+          cashier_name: profile?.name    ?? null,
+          product_name: item.name,
+          quantity:     item.qty,
+          price:        item.price,
+          mods:         item.mods?.map(m => m.name).join(', ') || null,
+          note:         item.note || null,
+        }).then(() => {})  // fire and forget
+      }
+    }
+    setCart(prev => prev.filter(i => i.cartKey !== cartKey))
+  }
   const updateNote = (cartKey, note)  => setCart(prev => prev.map(i => i.cartKey === cartKey ? { ...i, note } : i))
-  const clearCart  = ()          => { setCart([]); setDiscount(''); setDiscReason('') }
+  const clearCart  = ()          => { setCart([]); setDiscount(''); setDiscReason(''); setComandaEnviada(false) }
 
   const subtotal    = cart.reduce((s, i) => s + i.price * i.qty, 0)
   const discountAmt = Math.min(parseFloat(discount) || 0, subtotal)
@@ -215,6 +234,7 @@ export default function POS() {
     // Imprimir comanda en impresora térmica via JSPrintManager
     printComanda(activeBranch?.name, ticketLabel, items)
     setCmdSent(true)
+    setComandaEnviada(true)
     setTimeout(() => setCmdSent(false), 3000)
   }
 
