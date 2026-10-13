@@ -7,7 +7,7 @@ export default function Recipes() {
   const { activeBranch } = useAuth()
   const [products,    setProducts]    = useState([])
   const [ingredients, setIngredients] = useState([])
-  const [recipes,     setRecipes]     = useState({}) // { product_id: [recipe_items] }
+  const [recipes,     setRecipes]     = useState({}) // { product_id: [recipes] }
   const [expanded,    setExpanded]    = useState(null)
   const [addingTo,    setAddingTo]    = useState(null)   // product_id being edited
   const [newItem,     setNewItem]     = useState({ ingredient_id: '', quantity: '', unit: '' })
