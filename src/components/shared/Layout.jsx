@@ -10,7 +10,7 @@ import {
 
 const adminLinks = [
   { to: '/admin',               icon: LayoutDashboard, label: 'Dashboard',      exact: true },
-  { to: '/admin/ventas',        icon: ClipboardList,   label: 'Ventas'          },
+  { to: '/admin/ventas',        icon: ClipboardList,   label: 'Cuentas Cobradas' },
   { to: '/admin/estadisticas',  icon: BarChart2,       label: 'Estadísticas'    },
   { to: '/admin/cortes',        icon: Scissors,        label: 'Cortes de Caja'  },
   { to: '/admin/cuentas',       icon: BookOpen,        label: 'Cuentas'         },
