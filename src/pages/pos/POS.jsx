@@ -7,7 +7,7 @@ import {
   ShoppingCart, Search, Plus, Minus, Trash2, Tag,
   CreditCard, Banknote, Smartphone, X, CheckCircle, Clock,
   Printer, BookOpen, Scissors, ChefHat, FileText, MessageSquare,
-  AlertTriangle
+  AlertTriangle, Lock
 } from 'lucide-react'
 import InvoiceModal from '../../components/pos/InvoiceModal'
 import GastosTips from './GastosTips'
@@ -182,7 +182,20 @@ export default function POS() {
     })
   }, [])
 
-  const updateQty  = (cartKey, delta) => setCart(prev => prev.map(i => i.cartKey === cartKey ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0))
+  // Si hay comanda enviada, solo admin/encargado pueden eliminar artículos
+  const canDeletePostComanda = !comandaEnviada || profile?.role === 'admin' || profile?.role === 'encargado'
+
+  const updateQty  = (cartKey, delta) => {
+    // Cajero no puede reducir a 0 después de comanda enviada
+    if (delta < 0 && !canDeletePostComanda) {
+      setCart(prev => prev.map(i => {
+        if (i.cartKey !== cartKey) return i
+        return i.qty > 1 ? { ...i, qty: i.qty + delta } : i
+      }))
+      return
+    }
+    setCart(prev => prev.map(i => i.cartKey === cartKey ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0))
+  }
   const removeItem = (cartKey) => {
     if (comandaEnviada) {
       // Registrar la eliminación post-comanda
@@ -609,9 +622,15 @@ export default function POS() {
                       <button onClick={() => updateQty(item.cartKey, 1)} className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
                         <Plus className="w-3 h-3" />
                       </button>
-                      <button onClick={() => removeItem(item.cartKey)} className="w-7 h-7 rounded-full hover:bg-red-100 flex items-center justify-center text-gray-400 hover:text-red-500 ml-1 transition-colors">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
+                      {canDeletePostComanda ? (
+                        <button onClick={() => removeItem(item.cartKey)} className="w-7 h-7 rounded-full hover:bg-red-100 flex items-center justify-center text-gray-400 hover:text-red-500 ml-1 transition-colors">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      ) : (
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-red-300 ml-1" title="Solo encargado o admin puede eliminar después de enviar comanda">
+                          <Lock className="w-3 h-3" />
+                        </div>
+                      )}
                     </div>
                     <p className="text-sm font-bold text-gray-800 w-14 text-right">{mxn(item.price * item.qty)}</p>
                   </div>
