@@ -183,7 +183,7 @@ export default function POS() {
   }, [])
 
   // Si hay comanda enviada, solo admin/encargado pueden eliminar artículos
-  const canDeletePostComanda = !comandaEnviada || profile?.role === 'admin' || profile?.role === 'encargado'
+  const canDeletePostComanda = !comandaEnviada || profile?.role === 'admin'
 
   const updateQty  = (cartKey, delta) => {
     // Cajero no puede reducir a 0 después de comanda enviada
