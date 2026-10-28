@@ -21,6 +21,7 @@ import AdminEmployees    from './pages/admin/AdminEmployees'
 import AdminAttendance   from './pages/admin/AdminAttendance'
 import Reports           from './pages/admin/Reports'
 import DeletionLog       from './pages/admin/DeletionLog'
+import HistoricalSales   from './pages/admin/HistoricalSales'
 import AttendanceClock   from './pages/AttendanceClock'
 import KitchenDisplay    from './pages/KitchenDisplay'
 import Autofactura       from './pages/Autofactura'
@@ -119,6 +120,7 @@ function AppRoutes() {
       <Route path="/admin/asistencia"        element={<A><AdminAttendance /></A>} />
       <Route path="/admin/reportes"          element={<M><Reports /></M>} />
       <Route path="/admin/eliminados"        element={<M><DeletionLog /></M>} />
+      <Route path="/admin/historicos"        element={<A><HistoricalSales /></A>} />
 
       <Route path="/"  element={<Navigate to="/pos" replace />} />
       <Route path="*"  element={<Navigate to="/pos" replace />} />
