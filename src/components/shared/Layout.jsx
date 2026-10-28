@@ -5,13 +5,14 @@ import {
   ShoppingCart, LayoutDashboard, Package, BookOpen,
   Warehouse, BarChart2, ClipboardList, LogOut, Menu,
   ClipboardCheck, Scissors, MapPin, RefreshCw,
-  Users, CalendarDays, FileText, Trash2
+  Users, CalendarDays, FileText, Trash2, TrendingUp
 } from 'lucide-react'
 
 const adminLinks = [
   { to: '/admin',               icon: LayoutDashboard, label: 'Dashboard',      exact: true },
   { to: '/admin/ventas',        icon: ClipboardList,   label: 'Cuentas Cobradas' },
   { to: '/admin/estadisticas',  icon: BarChart2,       label: 'Estadísticas'    },
+  { to: '/admin/historicos',    icon: TrendingUp,      label: 'Históricos'      },
   { to: '/admin/cortes',        icon: Scissors,        label: 'Cortes de Caja'  },
   { to: '/admin/cuentas',       icon: BookOpen,        label: 'Cuentas'         },
   { to: '/admin/productos',     icon: Package,         label: 'Productos'       },
