@@ -38,12 +38,20 @@ export default function HistoricalSales() {
   const [saving,     setSaving]     = useState(false)
   const [saveMsg,    setSaveMsg]    = useState(null)  // {type:'ok'|'error', text}
 
+  const [dbError, setDbError] = useState(null)
+
   function loadHistory() {
     supabase
       .from('monthly_sales_history')
       .select('*')
-      .order('year').order('month_num')
-      .then(({ data }) => { setRows(data ?? []); setLoading(false) })
+      .order('year', { ascending: true })
+      .order('month_num', { ascending: true })
+      .limit(2000)
+      .then(({ data, error }) => {
+        if (error) { setDbError(error.message); setLoading(false); return }
+        setRows(data ?? [])
+        setLoading(false)
+      })
   }
 
   useEffect(() => { loadHistory() }, [])
@@ -172,12 +180,23 @@ export default function HistoricalSales() {
     <div className="p-6 flex items-center justify-center h-64 text-gray-400">Cargando históricos...</div>
   )
 
+  if (dbError) return (
+    <div className="p-6 max-w-4xl mx-auto">
+      <h1 className="text-2xl font-bold text-gray-900 mb-4">Histórico de Ventas</h1>
+      <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
+        <p className="text-red-700 font-medium mb-1">Error al leer la tabla:</p>
+        <code className="text-red-600 text-sm break-all">{dbError}</code>
+        <p className="text-red-500 text-xs mt-3">Verifica que ejecutaste el SQL en el proyecto correcto de Supabase y que el RLS esté deshabilitado.</p>
+      </div>
+    </div>
+  )
+
   if (rows.length === 0) return (
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-900 mb-4">Histórico de Ventas</h1>
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center">
-        <p className="text-amber-700 font-medium">No hay datos históricos cargados aún.</p>
-        <p className="text-amber-600 text-sm mt-1">Ejecuta el SQL <code>sql-historicos.sql</code> en Supabase para importar los datos.</p>
+        <p className="text-amber-700 font-medium">La tabla existe pero está vacía.</p>
+        <p className="text-amber-600 text-sm mt-1">Ejecuta el archivo <code>sql-historicos-insert.sql</code> en Supabase (SQL Editor → New query → pegar → Run).</p>
       </div>
     </div>
   )
