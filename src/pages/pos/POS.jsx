@@ -811,27 +811,34 @@ function ModifierModal({ product, onClose, onConfirm }) {
         .select('product_id, quantity')
         .eq('combo_product_id', product.id)
 
-      let pizzaCount = 0
-      let pizzaProductId = null
+      // ── Combo items ──────────────────────────────────────────
       if (cData?.length) {
         const ids = cData.map(c => c.product_id)
         const { data: pData } = await supabase
-          .from('products')
-          .select('id, name, categories(name)')
-          .in('id', ids)
+          .from('products').select('id, name').in('id', ids)
         const pMap = Object.fromEntries((pData ?? []).map(p => [p.id, p]))
         setComboItems(cData.map(c => ({
           ...c,
           products: { name: pMap[c.product_id]?.name ?? 'Producto' },
         })))
-        // Contar cuántas pizzas lleva el combo y guardar el id de una pizza
-        for (const ci of cData) {
-          if (pMap[ci.product_id]?.categories?.name === 'Pizzas') {
-            pizzaCount += ci.quantity
-            if (!pizzaProductId) pizzaProductId = ci.product_id
-          }
-        }
       }
+
+      // ── Detectar pizzas: usar grupos "Elige tu pizza / pizza" como contador ─
+      // (más confiable que el join de categorías que puede fallar en PostgREST)
+      const pizzaSlotGroups = baseGroups.filter(g =>
+        /pizza|elige/i.test(g.name ?? '') && !/mitad/i.test(g.name ?? '')
+      )
+      // Fallback: contar combo_items si los grupos pizza no dan info
+      const pizzaCountFromGroups = pizzaSlotGroups.length
+      // Intentar también desde combo_items (cualquier producto)
+      const pizzaCountFromCombo  = cData?.reduce((s, ci) => s + ci.quantity, 0) ?? 0
+      // Usamos el que sea > 1; si ninguno es >=2, no hay 2 pizzas para duplicar
+      const pizzaCount = pizzaCountFromGroups >= 2 ? pizzaCountFromGroups
+                        : pizzaCountFromCombo  >= 2 ? pizzaCountFromCombo
+                        : 0
+
+      // Para el Caso B (buscar mitad en sub-producto), guardamos el primer combo_item
+      const pizzaProductId = cData?.length ? cData[0]?.product_id : null
 
       if (pizzaCount >= 2) {
         // Caso A: el combo tiene sus propios grupos "mitad" → duplicarlos (uno por pizza)
@@ -1663,7 +1670,9 @@ function openTicketWindow(sale) {
   const METHOD = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', plataforma: sale.platform_name ?? 'Plataforma', mixto: 'Mixto' }
 
   const itemRows = (sale.items ?? []).map(i => {
-    const mods  = i.mods?.length  ? `<div class="mod">+ ${i.mods.map(m => m.name).join(', ')}</div>` : ''
+    const mods  = i.mods?.length
+      ? i.mods.map(m => `<div class="mod">+ ${formatModLabel(m)}</div>`).join('')
+      : ''
     const combo = i.comboItems?.length ? i.comboItems.map(c => `<div class="mod">· ${c.products?.name} ×${c.quantity}</div>`).join('') : ''
     const note  = i.note ? `<div class="mod obs">* ${i.note}</div>` : ''
     return `<div class="item">
