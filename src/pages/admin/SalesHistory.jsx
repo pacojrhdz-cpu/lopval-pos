@@ -88,26 +88,76 @@ export default function SalesHistory() {
   }
 
   function printSaleModal() {
-    const win = window.open('', '_blank', 'width=400,height=600')
+    const win = window.open('', '_blank', 'width=400,height=700')
     if (!win || !viewSale) return
-    const items = viewItems.map(i =>
-      `<tr><td>${i.product_name}</td><td align="center">×${i.quantity}</td><td align="right">$${Number(i.subtotal ?? 0).toFixed(2)}</td></tr>`
-    ).join('')
-    win.document.write(`<html><head><title>Ticket</title>
-      <style>body{font-family:monospace;font-size:12px;margin:16px}table{width:100%}td{padding:2px 4px}hr{margin:8px 0}.total{font-weight:bold;font-size:14px}</style>
-    </head><body>
-      <p style="text-align:center;font-weight:bold">Pizza & Totó</p>
-      <p style="text-align:center">${fmtDateTime(viewSale.created_at)}</p>
-      <p>Cajero: ${viewSale.cashier_name ?? '—'}</p>
-      <hr/>
-      <table>${items}</table>
-      <hr/>
-      ${viewSale.discount > 0 ? `<p>Descuento: -$${Number(viewSale.discount).toFixed(2)}</p>` : ''}
-      <p class="total">TOTAL: $${Number(viewSale.total).toFixed(2)}</p>
-      <p>Método: ${METHOD_LABELS[viewSale.payment_method] ?? viewSale.payment_method}</p>
+    const fmt = n => `$${Number(n ?? 0).toFixed(2)}`
+    const folio = viewSale.id?.slice(-6).toUpperCase() ?? '——'
+    const fecha = fmtDateTime(viewSale.created_at)
+    const subtotalSinIva = Number(viewSale.total) / 1.16
+    const iva = Number(viewSale.total) - subtotalSinIva
+
+    const rows = viewItems.map(i => {
+      // Mods guardados como texto "Mod1, Mod2, Mod3" → una línea por mod
+      const modsHtml = i.mods
+        ? i.mods.split(', ').map(m => `<div class="mod">+ ${m}</div>`).join('')
+        : ''
+      return `
+        <div class="item">
+          <div class="item-row">
+            <span class="item-name">${i.product_name} ×${i.quantity}</span>
+            <span class="item-price">${fmt(i.subtotal)}</span>
+          </div>
+          ${modsHtml}
+        </div>`
+    }).join('')
+
+    const payHtml = viewSale.payment_method === 'mixto' && Array.isArray(viewSale.payments)
+      ? viewSale.payments.map(p =>
+          `<div class="pay-row"><span>${METHOD_LABELS[p.method] ?? p.method}</span><span>${fmt(p.amount)}</span></div>`
+        ).join('')
+      : `<div class="pay-row"><span>${METHOD_LABELS[viewSale.payment_method] ?? viewSale.payment_method}</span></div>`
+
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket</title>
+    <style>
+      @page { size: 80mm auto; margin: 0; }
+      * { box-sizing: border-box; }
+      body { font-family: Arial, sans-serif; font-size: 13px; font-weight: 700; width: 72mm; margin: 0 auto; padding: 3mm 1mm; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .center { text-align: center; }
+      .big { font-size: 18px; font-weight: 900; }
+      .sub { font-size: 12px; font-weight: 700; color: #333; margin: 1px 0; }
+      .dash { border-top: 2px dashed #000; margin: 6px 0; }
+      .item { margin: 5px 0; padding-bottom: 4px; border-bottom: 1px dashed #bbb; }
+      .item-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: 900; }
+      .item-name { flex: 1; }
+      .item-price { white-space: nowrap; margin-left: 6px; }
+      .mod { font-size: 12px; font-weight: 700; color: #444; padding-left: 8px; }
+      .total-row { display: flex; justify-content: space-between; font-size: 20px; font-weight: 900; border-top: 2px solid #000; padding-top: 5px; margin-top: 4px; }
+      .sub-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: #333; }
+      .pay-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-top: 3px; }
+      .footer { text-align: center; font-size: 12px; font-weight: 700; margin-top: 8px; color: #333; }
+    </style></head><body>
+    <div class="center">
+      <div class="big">Pizza &amp; Totó</div>
+      <div class="sub">Grupo Lopval</div>
+      <div class="sub">${viewSale.branch_name ?? ''}</div>
+      <div class="sub">${fecha}</div>
+      <div class="sub">Folio: #${folio}</div>
+      <div class="sub">Cajero: ${viewSale.cashier_name ?? '—'}</div>
+    </div>
+    <div class="dash"></div>
+    ${rows}
+    <div class="dash"></div>
+    ${viewSale.discount > 0 ? `<div class="sub-row"><span>Descuento</span><span>-${fmt(viewSale.discount)}</span></div>` : ''}
+    <div class="sub-row"><span>Subtotal s/IVA</span><span>${fmt(subtotalSinIva)}</span></div>
+    <div class="sub-row"><span>IVA (16%)</span><span>${fmt(iva)}</span></div>
+    <div class="total-row"><span>TOTAL</span><span>${fmt(viewSale.total)}</span></div>
+    <div class="dash"></div>
+    <div>Pago:</div>
+    ${payHtml}
+    <div class="footer">¡Gracias por su visita!<br>Vuelva pronto</div>
     </body></html>`)
     win.document.close()
-    win.print()
+    setTimeout(() => { win.print(); win.close() }, 400)
   }
 
   async function cancelSale() {
