@@ -10,6 +10,19 @@ import {
 } from 'lucide-react'
 import { printTicket } from '../../utils/thermalPrinter'
 
+// ─── Helpers para mods ──────────────────────────────────────────
+function formatModLabel(m) {
+  const gn = (m.groupName ?? '').toLowerCase()
+  if (!gn.includes('mitad')) return m.name
+  const pMatch = gn.match(/pizza\s*(\d+)/)
+  if (pMatch) return `P${pMatch[1]}: Mitad ${m.name}`
+  return `Mitad ${m.name}`
+}
+function modsSummary(mods) {
+  if (!mods?.length) return null
+  return mods.map(m => formatModLabel(m)).join(', ')
+}
+
 const CAT_COLORS = {
   'Pizzas':    'bg-stone-100 text-stone-700 ring-stone-200',
   'Pastas':    'bg-amber-100 text-amber-700 ring-amber-200',
@@ -130,11 +143,10 @@ export default function CuentaDetalle() {
         cart.map(i => ({
           account_id:   id,
           product_id:   i.product_id,
-          product_name: i.mods?.length
-            ? `${i.name} (${i.mods.map(m => m.name).join(', ')})`
-            : i.name,
+          product_name: i.name,
           quantity:     i.qty,
           unit_price:   i.price,
+          mods:         modsSummary(i.mods),
         }))
       )
     }
@@ -149,7 +161,7 @@ export default function CuentaDetalle() {
 
   function buildItemNotes(i) {
     const parts = []
-    if (i.mods?.length)       parts.push(i.mods.map(m => m.name).join(', '))
+    if (i.mods?.length)       parts.push(i.mods.map(m => formatModLabel(m)).join(', '))
     if (i.comboItems?.length) parts.push('Incluye: ' + i.comboItems.map(c => `${c.products?.name} ×${c.quantity}`).join(', '))
     return parts.length ? parts.join(' — ') : undefined
   }
@@ -166,7 +178,7 @@ export default function CuentaDetalle() {
 
     const rows = cart.map(i => {
       const mods  = i.mods?.length
-        ? `<div class="mod">+ ${i.mods.map(m => m.name).join(', ')}</div>` : ''
+        ? `<div class="mod">+ ${i.mods.map(m => formatModLabel(m)).join(', ')}</div>` : ''
       const combo = i.comboItems?.length
         ? `<div class="mod">Incluye: ${i.comboItems.map(c => `${c.products?.name} ×${c.quantity}`).join(', ')}</div>` : ''
       return `<div class="item">
@@ -267,18 +279,18 @@ export default function CuentaDetalle() {
     }).select().single()
     if (error) throw error
 
-    await supabase.from('sale_items').insert(
+    const { error: itemsErr } = await supabase.from('sale_items').insert(
       cart.map(i => ({
         sale_id:      sale.id,
         product_id:   i.product_id,
-        product_name: i.mods?.length
-          ? `${i.name} (${i.mods.map(m => m.name).join(', ')})`
-          : i.name,
+        product_name: i.name,
         quantity:     i.qty,
         unit_price:   i.price,
         subtotal:     i.price * i.qty,
+        mods:         modsSummary(i.mods),
       }))
     )
+    if (itemsErr) console.error('[sale_items]', itemsErr.message)
     await supabase.from('accounts').update({
       status: 'closed', closed_at: new Date().toISOString(), sale_id: sale.id,
     }).eq('id', id)
@@ -390,12 +402,12 @@ export default function CuentaDetalle() {
                 <div key={item.cartKey ?? idx} className="bg-gray-50 rounded-xl p-2">
                   <div className="flex items-center gap-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                    <p className="text-sm font-medium text-gray-800">{item.name}</p>
                     {item.mods?.length > 0 && (
-                      <p className="text-xs text-amber-600 truncate">+ {item.mods.map(m => m.name).join(', ')}</p>
+                      <p className="text-xs text-amber-600">+ {item.mods.map(m => formatModLabel(m)).join(', ')}</p>
                     )}
                     {item.comboItems?.length > 0 && (
-                      <p className="text-xs text-gray-400 truncate">· {item.comboItems.map(c => `${c.products?.name} ×${c.quantity}`).join(', ')}</p>
+                      <p className="text-xs text-gray-400">· {item.comboItems.map(c => `${c.products?.name} ×${c.quantity}`).join(', ')}</p>
                     )}
                     <p className="text-xs text-gray-500">{mxn(item.price)} c/u</p>
                   </div>
@@ -512,11 +524,45 @@ function ModifierModal({ product, onClose, onConfirm }) {
           .order('sort_order'),
         supabase
           .from('combo_items')
-          .select('*, products(name)')
+          .select('product_id, quantity')
           .eq('combo_product_id', product.id),
       ])
-      setGroups((assignments ?? []).map(a => a.modifier_groups).filter(Boolean))
-      setComboItems(cData ?? [])
+      const baseGroups = (assignments ?? []).map(a => a.modifier_groups).filter(Boolean)
+
+      let pizzaCount = 0
+      if (cData?.length) {
+        const ids = cData.map(c => c.product_id)
+        const { data: pData } = await supabase
+          .from('products')
+          .select('id, name, categories(name)')
+          .in('id', ids)
+        const pMap = Object.fromEntries((pData ?? []).map(p => [p.id, p]))
+        setComboItems(cData.map(c => ({
+          ...c,
+          products: { name: pMap[c.product_id]?.name ?? 'Producto' },
+        })))
+        pizzaCount = cData.reduce((sum, ci) => {
+          const cat = pMap[ci.product_id]?.categories?.name ?? ''
+          return cat === 'Pizzas' ? sum + ci.quantity : sum
+        }, 0)
+      }
+
+      if (pizzaCount >= 2) {
+        const expanded = []
+        for (const g of baseGroups) {
+          if (g.name?.toLowerCase().includes('mitad')) {
+            for (let p = 1; p <= pizzaCount; p++) {
+              expanded.push({ ...g, id: `${g.id}__p${p}`, name: `Pizza ${p} — ${g.name}`, required: true })
+            }
+          } else {
+            expanded.push(g)
+          }
+        }
+        setGroups(expanded)
+      } else {
+        setGroups(baseGroups)
+      }
+
       setLoading(false)
     }
     load()
@@ -553,7 +599,8 @@ function ModifierModal({ product, onClose, onConfirm }) {
     })
   }
 
-  function getModObj(id) {
+  function getModObj(id, hintGroup) {
+    if (hintGroup) { const m = hintGroup.modifiers?.find(x => x.id === id); if (m) return m }
     for (const g of groups) { const m = g.modifiers?.find(x => x.id === id); if (m) return m }
     return null
   }
@@ -564,7 +611,10 @@ function ModifierModal({ product, onClose, onConfirm }) {
       if (!isGroupVisible(g)) continue
       const selIds = selected[g.id] ?? new Set()
       if (isGroupRequired(g) && selIds.size === 0) { alert(`Debes elegir una opción en "${g.name}"`); return }
-      for (const id of selIds) { const mod = getModObj(id); if (mod) allMods.push(mod) }
+      for (const id of selIds) {
+        const mod = getModObj(id, g)
+        if (mod) allMods.push({ ...mod, groupName: g.name })
+      }
     }
     onConfirm(allMods, comboItems)
   }
