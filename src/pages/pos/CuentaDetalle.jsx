@@ -530,26 +530,31 @@ function ModifierModal({ product, onClose, onConfirm }) {
       ])
       const baseGroups = (assignments ?? []).map(a => a.modifier_groups).filter(Boolean)
 
-      let pizzaCount = 0
-      let pizzaProductId = null
+      // ── Combo items ──────────────────────────────────────────
       if (cData?.length) {
         const ids = cData.map(c => c.product_id)
         const { data: pData } = await supabase
-          .from('products')
-          .select('id, name, categories(name)')
-          .in('id', ids)
+          .from('products').select('id, name').in('id', ids)
         const pMap = Object.fromEntries((pData ?? []).map(p => [p.id, p]))
         setComboItems(cData.map(c => ({
           ...c,
           products: { name: pMap[c.product_id]?.name ?? 'Producto' },
         })))
-        for (const ci of cData) {
-          if (pMap[ci.product_id]?.categories?.name === 'Pizzas') {
-            pizzaCount += ci.quantity
-            if (!pizzaProductId) pizzaProductId = ci.product_id
-          }
-        }
       }
+
+      // ── Detectar pizzas desde grupos del combo ────────────────
+      // Solo detecta grupos explícitamente numerados (Pizza 1, Pizza 2)
+      // "Elige tu pizza" genérico o "Elige pasta" no deben contar
+      const pizzaSlotGroups = baseGroups.filter(g => {
+        const n = (g.name ?? '').toLowerCase()
+        return n.includes('pizza 1') || n.includes('pizza 2')
+      })
+      const pizzaCountFromGroups = pizzaSlotGroups.length
+      const pizzaCountFromCombo  = cData?.reduce((s, ci) => s + ci.quantity, 0) ?? 0
+      const pizzaCount = pizzaCountFromGroups >= 2 ? pizzaCountFromGroups
+                        : pizzaCountFromCombo  >= 2 ? pizzaCountFromCombo
+                        : 0
+      const pizzaProductId = cData?.length ? cData[0]?.product_id : null
 
       if (pizzaCount >= 2) {
         const ownMitad  = baseGroups.filter(g =>  g.name?.toLowerCase().includes('mitad'))
