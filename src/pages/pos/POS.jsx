@@ -13,6 +13,21 @@ import InvoiceModal from '../../components/pos/InvoiceModal'
 import GastosTips from './GastosTips'
 import { printTicket, printComanda } from '../../utils/thermalPrinter'
 
+// ─── Helpers para mods ──────────────────────────────────────────
+// Devuelve "Mitad Pastor", "P1: Mitad Pastor", etc.  según groupName
+function formatModLabel(m) {
+  const gn = (m.groupName ?? '').toLowerCase()
+  if (!gn.includes('mitad')) return m.name
+  const pMatch = gn.match(/pizza\s*(\d+)/)
+  if (pMatch) return `P${pMatch[1]}: Mitad ${m.name}`
+  return `Mitad ${m.name}`
+}
+// Resumen de mods para guardar en BD (campo TEXT)
+function modsSummary(mods) {
+  if (!mods?.length) return null
+  return mods.map(m => formatModLabel(m)).join(', ')
+}
+
 const CAT_COLORS = {
   'Pizzas':    'bg-stone-100 text-stone-700 ring-stone-200',
   'Pastas':    'bg-amber-100 text-amber-700 ring-amber-200',
@@ -226,7 +241,7 @@ export default function POS() {
 
   function buildItemNotes(i) {
     const parts = []
-    if (i.mods?.length)       parts.push(i.mods.map(m => m.name).join(', '))
+    if (i.mods?.length)       parts.push(i.mods.map(m => formatModLabel(m)).join(', '))
     if (i.comboItems?.length) parts.push('Incluye: ' + i.comboItems.map(c => `${c.products?.name} ×${c.quantity}`).join(', '))
     if (i.note)               parts.push(i.note)
     return parts.length ? parts.join(' — ') : undefined
@@ -274,7 +289,7 @@ export default function POS() {
       ? `<img src="${window.location.origin}${logoPath}" alt="Logo" style="display:block;margin:0 auto 4px;height:44px;object-fit:contain;">`
       : ''
     const rows   = cart.map(i => {
-      const mods  = i.mods?.length ? `<div class="item-mod">+ ${i.mods.map(m => m.name).join(', ')}</div>` : ''
+      const mods  = i.mods?.length ? `<div class="item-mod">+ ${i.mods.map(m => formatModLabel(m)).join(', ')}</div>` : ''
       const combo = i.comboItems?.length
         ? i.comboItems.map(c => `<div class="item-mod">· ${c.products?.name} ×${c.quantity}</div>`).join('')
         : ''
@@ -333,18 +348,18 @@ export default function POS() {
 
     if (error) throw error
 
-    await supabase.from('sale_items').insert(
+    const { error: itemsErr } = await supabase.from('sale_items').insert(
       cart.map(i => ({
         sale_id:      sale.id,
         product_id:   i.id,
-        product_name: i.mods?.length
-          ? `${i.name} (${i.mods.map(m => m.name).join(', ')})`
-          : i.name,
+        product_name: i.name,
         quantity:     i.qty,
         unit_price:   i.price,
         subtotal:     i.price * i.qty,
+        mods:         modsSummary(i.mods),
       }))
     )
+    if (itemsErr) console.error('[sale_items]', itemsErr.message)
 
     // Descontar empaques de pizza del inventario
     try {
@@ -493,7 +508,7 @@ export default function POS() {
                 selCat === cat ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              {cat}
+              {cat === 'Extras' ? '⚡ Extras' : cat}
             </button>
           ))}
         </div>
@@ -592,10 +607,10 @@ export default function POS() {
                 <div key={item.cartKey} className="bg-gray-50 rounded-xl p-2">
                   <div className="flex items-start gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                      <p className="text-sm font-medium text-gray-800">{item.name}</p>
                       {item.mods?.length > 0 && (
-                        <p className="text-xs text-amber-600 truncate">
-                          + {item.mods.map(m => m.name).join(', ')}
+                        <p className="text-xs text-amber-600">
+                          + {item.mods.map(m => formatModLabel(m)).join(', ')}
                         </p>
                       )}
                       {item.comboItems?.length > 0 && (
@@ -783,10 +798,10 @@ function ModifierModal({ product, onClose, onConfirm }) {
         .select('sort_order, max_selections, modifier_groups(*, modifiers(*))')
         .eq('product_id', product.id)
         .order('sort_order')
-      setGroups((assignments ?? []).map(a => ({
+      const baseGroups = (assignments ?? []).map(a => ({
         ...a.modifier_groups,
         max_selections: a.max_selections ?? a.modifier_groups?.max_selections,
-      })).filter(Boolean))
+      })).filter(Boolean)
 
       // Cargar componentes del combo directamente (sin join para evitar ambigüedad de FK)
       const { data: cData } = await supabase
@@ -794,11 +809,40 @@ function ModifierModal({ product, onClose, onConfirm }) {
         .select('product_id, quantity')
         .eq('combo_product_id', product.id)
 
+      let pizzaCount = 0
       if (cData?.length) {
         const ids = cData.map(c => c.product_id)
-        const { data: pData } = await supabase.from('products').select('id, name').in('id', ids)
-        const names = Object.fromEntries((pData ?? []).map(p => [p.id, p.name]))
-        setComboItems(cData.map(c => ({ ...c, products: { name: names[c.product_id] ?? 'Producto' } })))
+        const { data: pData } = await supabase
+          .from('products')
+          .select('id, name, categories(name)')
+          .in('id', ids)
+        const pMap = Object.fromEntries((pData ?? []).map(p => [p.id, p]))
+        setComboItems(cData.map(c => ({
+          ...c,
+          products: { name: pMap[c.product_id]?.name ?? 'Producto' },
+        })))
+        // Contar cuántas pizzas lleva el combo
+        pizzaCount = cData.reduce((sum, ci) => {
+          const cat = pMap[ci.product_id]?.categories?.name ?? ''
+          return cat === 'Pizzas' ? sum + ci.quantity : sum
+        }, 0)
+      }
+
+      // Si hay 2+ pizzas en el combo, duplicar cada grupo "mitad" como "Pizza 1 — ..." y "Pizza 2 — ..."
+      if (pizzaCount >= 2) {
+        const expanded = []
+        for (const g of baseGroups) {
+          if (g.name?.toLowerCase().includes('mitad')) {
+            for (let p = 1; p <= pizzaCount; p++) {
+              expanded.push({ ...g, id: `${g.id}__p${p}`, name: `Pizza ${p} — ${g.name}`, required: true })
+            }
+          } else {
+            expanded.push(g)
+          }
+        }
+        setGroups(expanded)
+      } else {
+        setGroups(baseGroups)
       }
 
       setLoading(false)
@@ -865,7 +909,12 @@ function ModifierModal({ product, onClose, onConfirm }) {
     })
   }
 
-  function getModObj(id) {
+  function getModObj(id, hintGroup) {
+    // Si se pasa el grupo directamente, buscar ahí primero (cubre grupos virtuales)
+    if (hintGroup) {
+      const m = hintGroup.modifiers?.find(x => x.id === id)
+      if (m) return m
+    }
     for (const g of groups) {
       const m = g.modifiers?.find(x => x.id === id)
       if (m) return m
@@ -884,9 +933,9 @@ function ModifierModal({ product, onClose, onConfirm }) {
         return
       }
       for (const [id, count] of Object.entries(counts)) {
-        const mod = getModObj(id)
+        const mod = getModObj(id, g)
         if (mod && count > 0) {
-          for (let i = 0; i < count; i++) allMods.push(mod)
+          for (let i = 0; i < count; i++) allMods.push({ ...mod, groupName: g.name })
         }
       }
     }
