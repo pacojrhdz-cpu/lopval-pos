@@ -530,6 +530,7 @@ function ModifierModal({ product, onClose, onConfirm }) {
       const baseGroups = (assignments ?? []).map(a => a.modifier_groups).filter(Boolean)
 
       let pizzaCount = 0
+      let pizzaProductId = null
       if (cData?.length) {
         const ids = cData.map(c => c.product_id)
         const { data: pData } = await supabase
@@ -541,24 +542,41 @@ function ModifierModal({ product, onClose, onConfirm }) {
           ...c,
           products: { name: pMap[c.product_id]?.name ?? 'Producto' },
         })))
-        pizzaCount = cData.reduce((sum, ci) => {
-          const cat = pMap[ci.product_id]?.categories?.name ?? ''
-          return cat === 'Pizzas' ? sum + ci.quantity : sum
-        }, 0)
-      }
-
-      if (pizzaCount >= 2) {
-        const expanded = []
-        for (const g of baseGroups) {
-          if (g.name?.toLowerCase().includes('mitad')) {
-            for (let p = 1; p <= pizzaCount; p++) {
-              expanded.push({ ...g, id: `${g.id}__p${p}`, name: `Pizza ${p} — ${g.name}`, required: true })
-            }
-          } else {
-            expanded.push(g)
+        for (const ci of cData) {
+          if (pMap[ci.product_id]?.categories?.name === 'Pizzas') {
+            pizzaCount += ci.quantity
+            if (!pizzaProductId) pizzaProductId = ci.product_id
           }
         }
-        setGroups(expanded)
+      }
+
+      if (pizzaCount >= 1 && pizzaProductId) {
+        const { data: pizzaAssignments } = await supabase
+          .from('product_modifier_group_assignments')
+          .select('sort_order, modifier_groups(*, modifiers(*))')
+          .eq('product_id', pizzaProductId)
+          .order('sort_order')
+
+        const mitadGroups = (pizzaAssignments ?? [])
+          .map(a => a.modifier_groups)
+          .filter(g => g?.name?.toLowerCase().includes('mitad'))
+
+        if (mitadGroups.length > 0) {
+          const extraGroups = []
+          for (let p = 1; p <= pizzaCount; p++) {
+            for (const mg of mitadGroups) {
+              extraGroups.push({
+                ...mg,
+                id: `${mg.id}__p${p}`,
+                name: `Pizza ${p} — ${mg.name}`,
+                required: false,
+              })
+            }
+          }
+          setGroups([...baseGroups, ...extraGroups])
+        } else {
+          setGroups(baseGroups)
+        }
       } else {
         setGroups(baseGroups)
       }
