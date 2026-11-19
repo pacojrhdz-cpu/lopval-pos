@@ -178,7 +178,8 @@ export default function CuentaDetalle() {
 
     const rows = cart.map(i => {
       const mods  = i.mods?.length
-        ? `<div class="mod">+ ${i.mods.map(m => formatModLabel(m)).join(', ')}</div>` : ''
+        ? i.mods.map(m => `<div class="mod">+ ${formatModLabel(m)}</div>`).join('')
+        : ''
       const combo = i.comboItems?.length
         ? `<div class="mod">Incluye: ${i.comboItems.map(c => `${c.products?.name} ×${c.quantity}`).join(', ')}</div>` : ''
       return `<div class="item">
@@ -550,30 +551,50 @@ function ModifierModal({ product, onClose, onConfirm }) {
         }
       }
 
-      if (pizzaCount >= 1 && pizzaProductId) {
-        const { data: pizzaAssignments } = await supabase
-          .from('product_modifier_group_assignments')
-          .select('sort_order, modifier_groups(*, modifiers(*))')
-          .eq('product_id', pizzaProductId)
-          .order('sort_order')
+      if (pizzaCount >= 2) {
+        const ownMitad  = baseGroups.filter(g =>  g.name?.toLowerCase().includes('mitad'))
+        const otherGrps = baseGroups.filter(g => !g.name?.toLowerCase().includes('mitad'))
 
-        const mitadGroups = (pizzaAssignments ?? [])
-          .map(a => a.modifier_groups)
-          .filter(g => g?.name?.toLowerCase().includes('mitad'))
-
-        if (mitadGroups.length > 0) {
-          const extraGroups = []
+        if (ownMitad.length > 0) {
+          const expanded = [...otherGrps]
           for (let p = 1; p <= pizzaCount; p++) {
-            for (const mg of mitadGroups) {
-              extraGroups.push({
+            for (const mg of ownMitad) {
+              expanded.push({
                 ...mg,
-                id: `${mg.id}__p${p}`,
-                name: `Pizza ${p} — ${mg.name}`,
-                required: false,
+                id:       `${mg.id}__p${p}`,
+                name:     `Pizza ${p} — ${mg.name}`,
+                required: mg.required,
               })
             }
           }
-          setGroups([...baseGroups, ...extraGroups])
+          setGroups(expanded)
+        } else if (pizzaProductId) {
+          const { data: pizzaAssignments } = await supabase
+            .from('product_modifier_group_assignments')
+            .select('sort_order, modifier_groups(*, modifiers(*))')
+            .eq('product_id', pizzaProductId)
+            .order('sort_order')
+
+          const fetchedMitad = (pizzaAssignments ?? [])
+            .map(a => a.modifier_groups)
+            .filter(g => g?.name?.toLowerCase().includes('mitad'))
+
+          if (fetchedMitad.length > 0) {
+            const extraGroups = []
+            for (let p = 1; p <= pizzaCount; p++) {
+              for (const mg of fetchedMitad) {
+                extraGroups.push({
+                  ...mg,
+                  id:       `${mg.id}__p${p}`,
+                  name:     `Pizza ${p} — ${mg.name}`,
+                  required: false,
+                })
+              }
+            }
+            setGroups([...baseGroups, ...extraGroups])
+          } else {
+            setGroups(baseGroups)
+          }
         } else {
           setGroups(baseGroups)
         }
