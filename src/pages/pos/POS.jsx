@@ -825,9 +825,12 @@ function ModifierModal({ product, onClose, onConfirm }) {
 
       // ── Detectar pizzas: usar grupos "Elige tu pizza / pizza" como contador ─
       // (más confiable que el join de categorías que puede fallar en PostgREST)
-      const pizzaSlotGroups = baseGroups.filter(g =>
-        /pizza|elige/i.test(g.name ?? '') && !/mitad/i.test(g.name ?? '')
-      )
+      // Solo detecta grupos explícitamente numerados (Pizza 1, Pizza 2)
+      // "Elige tu pizza" genérico o "Elige pasta" no deben contar
+      const pizzaSlotGroups = baseGroups.filter(g => {
+        const n = (g.name ?? '').toLowerCase()
+        return n.includes('pizza 1') || n.includes('pizza 2')
+      })
       // Fallback: contar combo_items si los grupos pizza no dan info
       const pizzaCountFromGroups = pizzaSlotGroups.length
       // Intentar también desde combo_items (cualquier producto)
